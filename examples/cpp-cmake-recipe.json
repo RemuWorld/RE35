@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "tools": {
+    "cmake": { "command": "cmake", "args": [], "cwd": { "base": "project", "path": "." }, "description": "CMake" },
+    "ctest": { "command": "ctest", "args": [], "cwd": { "base": "project", "path": "." }, "description": "CTest" }
+  },
+  "projects": {
+    "cpp": {
+      "name": "C/C++ CMake project",
+      "root": { "base": "project", "path": "." },
+      "configurations": ["Debug", "Release"],
+      "targets": ["app"],
+      "default_configuration": "Debug",
+      "default_target": "app"
+    }
+  },
+  "recipes": {
+    "cpp_build_test": {
+      "name": "Configure, build and test",
+      "project": "cpp",
+      "steps": [
+        { "id": "configure", "name": "Configure", "tool": "cmake", "args": ["-S", "{root}", "-B", "{root}/build", "-DCMAKE_BUILD_TYPE={configuration}"] },
+        { "id": "build", "name": "Build", "tool": "cmake", "args": ["--build", "{root}/build", "--config", "{configuration}", "--target", "{target}"] },
+        { "id": "test", "name": "Test", "tool": "ctest", "args": ["--test-dir", "{root}/build", "--output-on-failure", "-C", "{configuration}"] }
+      ]
+    }
+  }
+}

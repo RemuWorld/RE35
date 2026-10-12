@@ -1,0 +1,1236 @@
+{
+  "version": 1,
+  "scope": "inspection-only",
+  "authority": "No executable commands, production registration, performance acceptance or physical UI approval",
+  "selection": "Fixed representative matrix, not a Cartesian product",
+  "hosts": {
+    "neovim": {
+      "viewports": {
+        "narrow": {
+          "columns": 60,
+          "lines": 20
+        },
+        "wide": {
+          "columns": 120,
+          "lines": 40
+        },
+        "tiny": {
+          "columns": 16,
+          "lines": 6
+        }
+      },
+      "geometry": "Cell geometry is checked against the actual terminal dimensions"
+    },
+    "vscode": {
+      "viewports": {
+        "narrow": {
+          "width": 800,
+          "height": 600
+        },
+        "wide": {
+          "width": 1280,
+          "height": 800
+        },
+        "tiny": {
+          "width": 640,
+          "height": 480
+        }
+      },
+      "geometry": "Requested outer-window targets; record actual geometry and any native window-manager clamping. Not a pixel contract."
+    }
+  },
+  "presentation": {
+    "version": 1,
+    "selected": "full",
+    "presets": {
+      "focused": {
+        "name": "Focused",
+        "extends": "minimal",
+        "spacing": {
+          "horizontal": 3,
+          "vertical": 0
+        },
+        "roles": {
+          "normal": {
+            "fg": "#AABBCC",
+            "bg": "#102030"
+          },
+          "selected": {
+            "bg": "#304050"
+          }
+        },
+        "scenes": {
+          "tree": {
+            "information": {
+              "title": true
+            }
+          },
+          "review": {
+            "information": {
+              "title": true,
+              "details": true
+            }
+          },
+          "tasks": {
+            "information": {
+              "status": true
+            }
+          },
+          "results": {
+            "information": {
+              "details": true
+            }
+          }
+        }
+      }
+    }
+  },
+  "contents": {
+    "tree-long-unicode": {
+      "label": "Project commands",
+      "description": "Long Unicode command labels",
+      "items": [
+        {
+          "id": "fixture.alpha",
+          "name": "Configure",
+          "label": "Configure",
+          "key": "a",
+          "detail": "configuration = Debug",
+          "description": "configuration = Debug"
+        },
+        {
+          "id": "fixture.beta",
+          "name": "Build target 한글 😀 with deliberately long command label",
+          "label": "Build target 한글 😀 with deliberately long command label",
+          "key": "b",
+          "detail": "original target-A",
+          "description": "original target-A"
+        },
+        {
+          "id": "fixture.gamma",
+          "name": "Test",
+          "label": "Test",
+          "key": "c",
+          "detail": "configuration = Release",
+          "description": "configuration = Release"
+        }
+      ],
+      "selected": "fixture.beta"
+    },
+    "tree-ordinary": {
+      "label": "Project commands",
+      "description": "Ordinary tree list",
+      "items": [
+        {
+          "id": "fixture.alpha",
+          "name": "Configure",
+          "label": "Configure",
+          "key": "a",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "fixture.beta",
+          "name": "Build 한글",
+          "label": "Build 한글",
+          "key": "b",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "fixture.gamma",
+          "name": "Test",
+          "label": "Test",
+          "key": "c",
+          "detail": "",
+          "description": ""
+        }
+      ],
+      "selected": "fixture.beta"
+    },
+    "search-unicode": {
+      "label": "Search commands",
+      "description": "Unicode query and stable selected command",
+      "query": "빌드",
+      "queryCursor": 1,
+      "items": [
+        {
+          "id": "fixture.alpha",
+          "name": "Build target A",
+          "label": "Build target A",
+          "key": "",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "fixture.beta",
+          "name": "Build 한글 😀 target B",
+          "label": "Build 한글 😀 target B",
+          "key": "",
+          "detail": "portable build",
+          "description": "portable build"
+        }
+      ],
+      "selected": "fixture.beta"
+    },
+    "search-empty": {
+      "label": "Search commands",
+      "description": "Empty command search",
+      "query": "absent-target",
+      "queryCursor": 13,
+      "items": [],
+      "empty": "No matching commands",
+      "selected": null
+    },
+    "search-error": {
+      "label": "Search commands",
+      "description": "Empty result with explicit unavailable reason",
+      "query": "compiler",
+      "queryCursor": 8,
+      "items": [],
+      "empty": "No matching commands",
+      "error": "Missing compiler",
+      "selected": null
+    },
+    "input-unicode": {
+      "label": "Command input",
+      "description": "Required Unicode input keeps its caret",
+      "items": [
+        {
+          "id": "argument.value",
+          "name": "Debug한글/target-A",
+          "label": "Debug한글/target-A",
+          "key": ">",
+          "detail": "",
+          "description": ""
+        }
+      ],
+      "selected": "argument.value",
+      "input": {
+        "question": "Target configuration",
+        "value": "Debug한글/target-A",
+        "valueSelection": [
+          5,
+          5
+        ],
+        "cursor": 5,
+        "error": null,
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      }
+    },
+    "input-long-unicode": {
+      "label": "Command input",
+      "description": "Long value uses native caret viewport",
+      "items": [
+        {
+          "id": "argument.value",
+          "name": "projects/한글/😀/Debug/target-A/portable/source.cpp",
+          "label": "projects/한글/😀/Debug/target-A/portable/source.cpp",
+          "key": ">",
+          "detail": "",
+          "description": ""
+        }
+      ],
+      "selected": "argument.value",
+      "input": {
+        "question": "Target configuration",
+        "value": "projects/한글/😀/Debug/target-A/portable/source.cpp",
+        "valueSelection": [
+          25,
+          25
+        ],
+        "cursor": 24,
+        "error": null,
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      }
+    },
+    "review-arguments": {
+      "label": "Review arguments",
+      "description": "Submitted original configuration and target",
+      "items": [
+        {
+          "id": "argument.configuration",
+          "name": "configuration = Debug",
+          "label": "configuration = Debug",
+          "key": "1",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "argument.target",
+          "name": "target = target-A 한글",
+          "label": "target = target-A 한글",
+          "key": "2",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "review.run",
+          "name": "Execute with these arguments",
+          "label": "Execute with these arguments",
+          "key": "Run",
+          "detail": "",
+          "description": ""
+        }
+      ],
+      "selected": "review.run",
+      "facts": [
+        "configuration = Debug",
+        "target = target-A 한글"
+      ],
+      "target": "source-한글.cpp",
+      "optionalPresentation": {
+        "details": true,
+        "status": true
+      }
+    },
+    "tasks-failed": {
+      "label": "#fixture-task Build 실패",
+      "description": "Failed owned task",
+      "items": [
+        {
+          "id": "task.fixture-task",
+          "name": "Build 실패",
+          "label": "Build 실패",
+          "key": "#fixture-task",
+          "detail": "exit 7",
+          "description": "exit 7"
+        },
+        {
+          "id": "task.other",
+          "name": "Other successful task",
+          "label": "Other successful task",
+          "key": "#other",
+          "detail": "exit 0",
+          "description": "exit 0"
+        }
+      ],
+      "selected": "task.fixture-task",
+      "status": "Failed · exit 7",
+      "error": "Build failed",
+      "owner": {
+        "id": "fixture-task",
+        "command": "fixture.failed",
+        "status": "failed",
+        "exitCode": 7
+      },
+      "optionalPresentation": {
+        "status": true
+      }
+    },
+    "tasks-empty": {
+      "label": "Tasks",
+      "description": "Empty task list",
+      "items": [],
+      "empty": "No tasks",
+      "selected": null
+    },
+    "results-partial-unicode": {
+      "label": "#fixture-task Build 실패",
+      "description": "Partial structured compiler output",
+      "items": [
+        {
+          "id": "result.first",
+          "name": "First compiler error",
+          "label": "First compiler error",
+          "key": "1",
+          "detail": "source-한글.cpp:1:2",
+          "description": "source-한글.cpp:1:2"
+        },
+        {
+          "id": "result.second",
+          "name": "Second compiler error 한글 😀",
+          "label": "Second compiler error 한글 😀",
+          "key": "2",
+          "detail": "source-한글.cpp:2:3",
+          "description": "source-한글.cpp:2:3"
+        }
+      ],
+      "selected": "result.second",
+      "target": "source-한글.cpp:2:3",
+      "status": "2 locations",
+      "error": "partial results: captured output limit",
+      "owner": {
+        "id": "fixture-task",
+        "command": "fixture.failed",
+        "status": "failed",
+        "exitCode": 7
+      },
+      "optionalPresentation": {
+        "details": true
+      }
+    },
+    "results-empty": {
+      "label": "Results",
+      "description": "Empty structured output",
+      "items": [],
+      "empty": "No results",
+      "selected": null
+    },
+    "input-tiny-refusal": {
+      "label": "Command input",
+      "description": "Required facts exceed tiny Neovim geometry",
+      "error": "Required facts must remain reviewable",
+      "items": [
+        {
+          "id": "argument.value",
+          "name": "ready",
+          "label": "ready",
+          "key": ">",
+          "detail": "",
+          "description": ""
+        }
+      ],
+      "selected": "argument.value",
+      "input": {
+        "question": "Select the original configuration, required arguments and target before execution",
+        "value": "ready",
+        "valueSelection": [
+          5,
+          5
+        ],
+        "cursor": 5,
+        "error": "Required facts must remain reviewable",
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      }
+    },
+    "review-tiny-refusal": {
+      "label": "Review arguments",
+      "description": "Whole review contains an unrepresentable required value",
+      "items": [
+        {
+          "id": "argument.configuration",
+          "name": "configuration = 原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原",
+          "label": "configuration = 原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原",
+          "key": "1",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "argument.target",
+          "name": "target = original-target-A",
+          "label": "target = original-target-A",
+          "key": "2",
+          "detail": "",
+          "description": ""
+        },
+        {
+          "id": "review.run",
+          "name": "Execute with these arguments",
+          "label": "Execute with these arguments",
+          "key": "Run",
+          "detail": "",
+          "description": ""
+        }
+      ],
+      "selected": "review.run",
+      "facts": [
+        "configuration = 原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原原",
+        "target = original-target-A"
+      ],
+      "target": "source-한글.cpp",
+      "error": "Required facts must remain reviewable"
+    }
+  },
+  "cases": [
+    {
+      "id": "case01",
+      "scene": "tree",
+      "mode": "full",
+      "viewport": "narrow",
+      "theme": "dark",
+      "content": "tree-long-unicode",
+      "selected": "fixture.beta",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case02",
+      "scene": "search",
+      "mode": "full",
+      "viewport": "wide",
+      "theme": "light",
+      "content": "search-unicode",
+      "selected": "fixture.beta",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case03",
+      "scene": "input",
+      "mode": "full",
+      "viewport": "narrow",
+      "theme": "light",
+      "content": "input-unicode",
+      "selected": "argument.value",
+      "input": {
+        "question": "Target configuration",
+        "value": "Debug한글/target-A",
+        "valueSelection": [
+          5,
+          5
+        ],
+        "cursor": 5,
+        "error": null,
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      },
+      "error": null,
+      "required": {
+        "input": true,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case04",
+      "scene": "review",
+      "mode": "full",
+      "viewport": "wide",
+      "theme": "dark",
+      "content": "review-arguments",
+      "selected": "review.run",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": true,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case05",
+      "scene": "tasks",
+      "mode": "full",
+      "viewport": "narrow",
+      "theme": "dark",
+      "content": "tasks-failed",
+      "selected": "task.fixture-task",
+      "input": null,
+      "error": "Build failed",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": true,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case06",
+      "scene": "results",
+      "mode": "full",
+      "viewport": "wide",
+      "theme": "light",
+      "content": "results-partial-unicode",
+      "selected": "result.second",
+      "input": null,
+      "error": "partial results: captured output limit",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": true,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case07",
+      "scene": "tree",
+      "mode": "compact",
+      "viewport": "wide",
+      "theme": "light",
+      "content": "tree-ordinary",
+      "selected": "fixture.beta",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case08",
+      "scene": "search",
+      "mode": "compact",
+      "viewport": "narrow",
+      "theme": "dark",
+      "content": "search-error",
+      "selected": null,
+      "input": null,
+      "error": "Missing compiler",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case09",
+      "scene": "input",
+      "mode": "compact",
+      "viewport": "wide",
+      "theme": "dark",
+      "content": "input-long-unicode",
+      "selected": "argument.value",
+      "input": {
+        "question": "Target configuration",
+        "value": "projects/한글/😀/Debug/target-A/portable/source.cpp",
+        "valueSelection": [
+          25,
+          25
+        ],
+        "cursor": 24,
+        "error": null,
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      },
+      "error": null,
+      "required": {
+        "input": true,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case10",
+      "scene": "review",
+      "mode": "compact",
+      "viewport": "narrow",
+      "theme": "light",
+      "content": "review-arguments",
+      "selected": "review.run",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": true,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case11",
+      "scene": "tasks",
+      "mode": "compact",
+      "viewport": "wide",
+      "theme": "light",
+      "content": "tasks-empty",
+      "selected": null,
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case12",
+      "scene": "results",
+      "mode": "compact",
+      "viewport": "narrow",
+      "theme": "dark",
+      "content": "results-partial-unicode",
+      "selected": "result.second",
+      "input": null,
+      "error": "partial results: captured output limit",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": true,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case13",
+      "scene": "tree",
+      "mode": "minimal",
+      "viewport": "narrow",
+      "theme": "dark",
+      "content": "tree-long-unicode",
+      "selected": "fixture.beta",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case14",
+      "scene": "search",
+      "mode": "minimal",
+      "viewport": "wide",
+      "theme": "light",
+      "content": "search-empty",
+      "selected": null,
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case15",
+      "scene": "input",
+      "mode": "minimal",
+      "viewport": "narrow",
+      "theme": "light",
+      "content": "input-long-unicode",
+      "selected": "argument.value",
+      "input": {
+        "question": "Target configuration",
+        "value": "projects/한글/😀/Debug/target-A/portable/source.cpp",
+        "valueSelection": [
+          25,
+          25
+        ],
+        "cursor": 24,
+        "error": null,
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      },
+      "error": null,
+      "required": {
+        "input": true,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case16",
+      "scene": "review",
+      "mode": "minimal",
+      "viewport": "wide",
+      "theme": "dark",
+      "content": "review-arguments",
+      "selected": "review.run",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": true,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case17",
+      "scene": "tasks",
+      "mode": "minimal",
+      "viewport": "narrow",
+      "theme": "dark",
+      "content": "tasks-failed",
+      "selected": "task.fixture-task",
+      "input": null,
+      "error": "Build failed",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": true,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case18",
+      "scene": "results",
+      "mode": "minimal",
+      "viewport": "wide",
+      "theme": "light",
+      "content": "results-empty",
+      "selected": null,
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true
+      }
+    },
+    {
+      "id": "case19",
+      "scene": "tree",
+      "mode": "focused",
+      "viewport": "wide",
+      "theme": "dark",
+      "content": "tree-long-unicode",
+      "selected": "fixture.beta",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true,
+        "customSceneOverride": true,
+        "nativeUnsupportedRolesPreserved": true
+      }
+    },
+    {
+      "id": "case20",
+      "scene": "review",
+      "mode": "focused",
+      "viewport": "narrow",
+      "theme": "light",
+      "content": "review-arguments",
+      "selected": "review.run",
+      "input": null,
+      "error": null,
+      "required": {
+        "input": false,
+        "review": true,
+        "facts": false,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true,
+        "customSceneOverride": true,
+        "nativeUnsupportedRolesPreserved": true
+      }
+    },
+    {
+      "id": "case21",
+      "scene": "tasks",
+      "mode": "focused",
+      "viewport": "wide",
+      "theme": "dark",
+      "content": "tasks-failed",
+      "selected": "task.fixture-task",
+      "input": null,
+      "error": "Build failed",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": true,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true,
+        "customSceneOverride": true,
+        "nativeUnsupportedRolesPreserved": true
+      }
+    },
+    {
+      "id": "case22",
+      "scene": "results",
+      "mode": "focused",
+      "viewport": "narrow",
+      "theme": "light",
+      "content": "results-partial-unicode",
+      "selected": "result.second",
+      "input": null,
+      "error": "partial results: captured output limit",
+      "required": {
+        "input": false,
+        "review": false,
+        "facts": true,
+        "refusal": false
+      },
+      "actions": [
+        {
+          "id": "presentation.redraw",
+          "outcome": "preserve-semantic-state"
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "requiredComplete": true,
+        "customSceneOverride": true,
+        "nativeUnsupportedRolesPreserved": true
+      }
+    },
+    {
+      "id": "case23",
+      "scene": "input",
+      "mode": "minimal",
+      "viewport": "tiny",
+      "theme": "dark",
+      "content": "input-tiny-refusal",
+      "selected": "argument.value",
+      "error": "Required facts must remain reviewable",
+      "input": {
+        "question": "Select the original configuration, required arguments and target before execution",
+        "value": "ready",
+        "valueSelection": [
+          5,
+          5
+        ],
+        "cursor": 5,
+        "error": "Required facts must remain reviewable",
+        "cursorEncoding": "unicode-code-point",
+        "valueSelectionEncoding": "utf-16-code-unit"
+      },
+      "required": {
+        "input": true,
+        "review": false,
+        "facts": false,
+        "refusal": true,
+        "refusalHost": "neovim"
+      },
+      "actions": [
+        {
+          "id": "input.accept",
+          "outcome": "preserve-required-facts-before-execution",
+          "hostOutcomes": {
+            "neovim": "refuse-enter-for-unreviewable-facts",
+            "vscode": "retain-native-required-facts-route-without-execution"
+          }
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "neovim": {
+          "requiredComplete": false,
+          "refuseEnter": true
+        },
+        "vscode": {
+          "requiredFactsRetained": true,
+          "geometryIsNotRefusalAuthority": true
+        }
+      }
+    },
+    {
+      "id": "case24",
+      "scene": "review",
+      "mode": "full",
+      "viewport": "tiny",
+      "theme": "light",
+      "content": "review-tiny-refusal",
+      "selected": "review.run",
+      "input": null,
+      "error": "Required facts must remain reviewable",
+      "required": {
+        "input": false,
+        "review": true,
+        "facts": false,
+        "refusal": true,
+        "refusalHost": "neovim"
+      },
+      "actions": [
+        {
+          "id": "review.run",
+          "outcome": "preserve-required-facts-before-execution",
+          "hostOutcomes": {
+            "neovim": "refuse-enter-for-unreviewable-facts",
+            "vscode": "retain-native-required-facts-route-without-execution"
+          }
+        }
+      ],
+      "outcomes": {
+        "sameSource": true,
+        "stableSelection": true,
+        "geometryBounded": true,
+        "appearanceOnly": true,
+        "neovim": {
+          "requiredComplete": false,
+          "refuseEnter": true
+        },
+        "vscode": {
+          "requiredFactsRetained": true,
+          "geometryIsNotRefusalAuthority": true
+        }
+      }
+    }
+  ]
+}

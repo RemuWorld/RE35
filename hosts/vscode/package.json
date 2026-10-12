@@ -1,0 +1,278 @@
+{
+  "name": "re35-desktop",
+  "displayName": "RE35 Command Environment",
+  "description": "Development host for shared RE35 documents, profiles and sequential project tasks.",
+  "version": "0.1.0",
+  "publisher": "RemuWorld",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "main": "./extension.js",
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false
+    },
+    "virtualWorkspaces": false
+  },
+  "activationEvents": [
+    "onCommand:re35.open",
+    "onCommand:re35.searchDocument",
+    "onCommand:re35.replaceLiteral",
+    "onCommand:re35.results",
+    "onCommand:re35.loadProfile",
+    "onCommand:re35.selectProject",
+    "onCommand:re35.projectContext",
+    "onCommand:re35.runRecipe",
+    "onCommand:re35.tasks",
+    "onCommand:re35.cancelRecipe",
+    "onCommand:re35.taskResults",
+    "onCommand:re35.searchProject",
+    "onCommand:re35.projectSearchResults",
+    "onCommand:re35.cancelProjectSearch",
+    "onCommand:re35.taskRecovery",
+    "onCommand:re35.presentationPresets",
+    "onCommand:re35.exportPresentation",
+    "onCommand:re35.importPresentation"
+  ],
+  "contributes": {
+    "commands": [
+      {
+        "command": "re35.open",
+        "title": "RE35: Open Command Environment"
+      },
+      {
+        "command": "re35.searchDocument",
+        "title": "RE35: Search Current Document"
+      },
+      {
+        "command": "re35.replaceLiteral",
+        "title": "RE35: Preview Literal Replacement"
+      },
+      {
+        "command": "re35.results",
+        "title": "RE35: Document Results"
+      },
+      {
+        "command": "re35.loadProfile",
+        "title": "RE35: Load Portable Profile"
+      },
+      {
+        "command": "re35.selectProject",
+        "title": "RE35: Select Project Context"
+      },
+      {
+        "command": "re35.projectContext",
+        "title": "RE35: Inspect Project Context"
+      },
+      {
+        "command": "re35.runRecipe",
+        "title": "RE35: Run Selected Recipe"
+      },
+      {
+        "command": "re35.tasks",
+        "title": "RE35: Inspect Recipe Tasks"
+      },
+      {
+        "command": "re35.cancelRecipe",
+        "title": "RE35: Cancel Running Recipe"
+      },
+      {
+        "command": "re35.taskResults",
+        "title": "RE35: Recipe Results"
+      },
+      {
+        "command": "re35.searchProject",
+        "title": "RE35: Search Project Text"
+      },
+      {
+        "command": "re35.projectSearchResults",
+        "title": "RE35: Project Search Results"
+      },
+      {
+        "command": "re35.cancelProjectSearch",
+        "title": "RE35: Cancel Project Search"
+      },
+      {
+        "command": "re35.taskRecovery",
+        "title": "RE35: Recover Original Task"
+      },
+      {
+        "command": "re35.presentationSupport",
+        "title": "RE35: Inspect Presentation Support"
+      },
+      {
+        "command": "re35.presentationPresets",
+        "title": "RE35: Presentation Presets"
+      },
+      {
+        "command": "re35.exportPresentation",
+        "title": "RE35: Export Presentation Presets"
+      },
+      {
+        "command": "re35.importPresentation",
+        "title": "RE35: Import Presentation Presets"
+      }
+    ],
+    "configuration": {
+      "title": "RE35",
+      "properties": {
+        "re35.helperPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to the separately built ce_stdio executable."
+        },
+        "re35.luaRuntime": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute path to a compatible Lua 5.1 ABI runtime library."
+        },
+        "re35.corePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Absolute RE35 Lua directory. Development checkout defaults to ../../lua."
+        },
+        "re35.projectRoots": {
+          "type": "object",
+          "default": {},
+          "scope": "machine",
+          "additionalProperties": {
+            "type": "string"
+          },
+          "description": "Local mapping from portable project IDs to exact file workspace-folder URIs. Required when more than one folder is open."
+        },
+        "re35.configBase": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Explicit absolute local base for portable project roots using config. Empty leaves that base unavailable."
+        },
+        "re35.homeBase": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "description": "Explicit absolute local base for portable project roots using home. Empty leaves that base unavailable."
+        },
+        "re35.toolOverrides": {
+          "type": "object",
+          "default": {},
+          "scope": "machine",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "command": {
+                "type": "string"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "cwd": {
+                "type": "string"
+              },
+              "timeout_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Step execution timeout in milliseconds; zero disables it. Expiry requests cancellation and escalation after grace.",
+                "maximum": 86400000
+              },
+              "cancel_grace_ms": {
+                "type": "integer",
+                "minimum": 0,
+                "description": "Cancellation grace in milliseconds (default 2000). Scoped helper requires at least 1 ms internally.",
+                "maximum": 60000
+              }
+            }
+          },
+          "description": "Local command/args/cwd, per-step timeout_ms and cancel_grace_ms. Step args/cwd take precedence. No implicit shell, timeout or executable installation."
+        },
+        "re35.processHelper": {
+          "type": "string",
+          "description": "Optional absolute ce_process_scope executable for Windows Job or Linux process-group ownership. Empty uses direct-child scope. A configured unavailable helper is refused without fallback.",
+          "scope": "machine",
+          "default": ""
+        },
+        "re35.projectSearch": {
+          "type": "object",
+          "scope": "machine",
+          "default": {},
+          "additionalProperties": false,
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Existing ripgrep executable name or absolute local path. Selected provider never falls back."
+            },
+            "limits": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "results": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 5000
+                },
+                "max_file_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 4194304
+                },
+                "read_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 67108864
+                },
+                "output_bytes": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 16777216
+                },
+                "milliseconds": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "maximum": 15000
+                }
+              }
+            }
+          },
+          "description": "Local saved-file search executable and limits. Provider is selected in the portable profile; builtin has smaller shared ceilings."
+        },
+        "re35.presentation": {
+          "type": "object",
+          "default": {
+            "version": 1,
+            "presets": {}
+          },
+          "scope": "window",
+          "additionalProperties": false,
+          "properties": {
+            "version": {
+              "type": "integer",
+              "enum": [
+                1
+              ]
+            },
+            "selected": {
+              "type": "string"
+            },
+            "presets": {
+              "type": "object"
+            }
+          },
+          "description": "Shared appearance preferences. An applied portable profile overrides this collection. Native UI applies optional information; geometry, icons, decoration and colors report native fallbacks. No executable styling."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "test:transport": "node test/transport.js"
+  }
+}

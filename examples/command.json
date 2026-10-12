@@ -1,0 +1,1 @@
+{"id":"demo.increment","name":"증가 😀","aliases":["inc"],"path":["d","i"],"capabilities":["counter"],"cancellable":true,"arguments":[{"name":"amount","kind":"number","required":true,"integer":true,"min":1,"max":9}]}

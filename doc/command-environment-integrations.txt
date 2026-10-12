@@ -1,0 +1,117 @@
+*command-environment-integrations*  Optional host integrations
+
+Command Environment works with Neovim alone. Keep the complete repository on
+your runtimepath and call require("re35").setup(). The legacy command_tree
+module returns the same API object. The core does
+not import config.lsp, ui.themes, runner, Mason, or any plugin manager. It uses
+language servers already attached through Neovim's LSP client.
+
+The setup option `integrations` accepts `theme`, `runner`, and `lsp` adapters.
+Each adapter is a table of ordinary functions, called without an implicit self.
+Additional plugin actions belong in the normal `commands` list; they do not
+need a special integration name. Invalid adapter callbacks fail setup with an
+explicit error instead of registering commands which cannot execute.
+
+THEME                                                    *ce-integration-theme*
+
+With no theme adapter, the picker discovers installed runtime colorschemes,
+previews the highlighted choice, restores the previous scheme and background
+on cancellation, and applies the selected scheme on confirmation. Setup itself
+does not change the colorscheme. This default adapter changes the current
+session; hosts which persist their own theme choice retain that responsibility.
+Use integrations.theme = false to omit this command.
+
+An explicit theme adapter requires these callbacks: >
+  require("re35").setup({
+    integrations = {
+      theme = {
+        items = function(ctx, args)
+          return { { value = "default", label = "Default" } }
+        end,
+        current = function(ctx, args) return vim.g.colors_name or "default" end,
+        preview = function(ctx, args)
+          -- Apply args.theme without persisting it.
+          -- Return a function which restores the previous state.
+          return function() end
+        end,
+        commit = function(ctx, args)
+          -- Apply args.theme and persist it if this host owns persistence.
+          return true
+          -- Return false, reason on failure.
+        end,
+        available = function(ctx) return true end, -- optional
+      },
+    },
+  })
+<
+`items` uses the usual select-argument contract. `preview` must undo its effects
+through the returned cleanup callback; the environment calls cleanup before
+another preview, cancellation, or commit. Commit must apply the chosen theme
+itself. Error recovery and persistence belong to the adapter which owns those
+effects. The command ID is ui.theme; paths remain `sut` and `ut`. As in earlier
+versions, providers.plugins = false suppresses the theme command.
+
+RUNNER                                                   *ce-integration-runner*
+
+No build runner is imported by default. Set integrations.runner to an adapter
+to register run.build_and_run (`rr` and the executable `r` branch). The required
+callbacks are available(ctx) and build_and_run(ctx, args, done, invocation).
+
+available returns a boolean and, when unavailable, a human-readable reason.
+build_and_run follows the async command contract: call done(true, result) only
+when the operation finishes, or done(false, reason) on failure; return a cancel
+function when cancellation is supported. Returning from build_and_run is not
+itself completion. The captured ctx identifies the requested buffer/window.
+
+The optional pair results_items(ctx, args) and show_result(ctx, args) registers
+run.results (`rl`). Both must be supplied together. results_items returns select
+items; show_result receives the selected value in args.job. Run > Tasks and
+Cancel are generic operation controls, independent of a build adapter.
+
+Use integrations.runner = false, omit the runner, or disable providers.runner
+to leave project-specific building to the host. The user's personal C/C++ runner
+can be injected without placing it inside the portable core: >
+  integrations = { runner = require("runner") }
+<
+LSP STATUS                                               *ce-integration-lsp*
+
+LSP operations use Neovim's attached clients without an adapter. Optional hooks
+allow a host which configures language servers to explain missing support: >
+  integrations = {
+    lsp = {
+      readiness = function(ctx, method)
+        -- method can be nil in the status view.
+        return false, "Install or enable the configured language server"
+      end,
+      status = function(ctx)
+        return { "Project language support details" }
+      end,
+    },
+  }
+<
+readiness is consulted only when no attached client supports the requested
+method, and in the status view. status returns a list of additional text lines.
+Hooks are captured per setup; changing a globally loaded config module cannot
+silently change an existing environment. Hooks neither install nor start servers.
+
+OTHER PLUGINS                                            *ce-integration-commands*
+
+Register plugin-specific commands explicitly, using the same ID contract: >
+  require("re35").setup({
+    commands = {
+      {
+        id = "ui.explorer", name = "Toggle file explorer", path = { "u", "e" },
+        available = function()
+          return vim.fn.exists(":Neotree") == 2, "Neotree is not available"
+        end,
+        run = function() vim.cmd("Neotree filesystem toggle reveal left") end,
+      },
+    },
+  })
+<
+This command reports synchronous dispatch completion. A plugin which performs
+later work needs its own async adapter to report that work's actual completion.
+The host's config/command_tree.lua demonstrates injected theme persistence,
+C/C++ runner, language diagnostics, and an explicitly registered explorer.
+
+vim:tw=78:ts=8:ft=help:norl:

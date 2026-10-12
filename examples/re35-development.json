@@ -1,0 +1,117 @@
+{
+  "version": 1,
+  "tools": {
+    "re35_neovim": {
+      "command": "python",
+      "args": ["tests/run.py"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "RE35 Neovim regression",
+      "errorformat": "%f:%l:%c: %m,%f:%l: %m,%-G%.%#"
+    },
+    "re35_configure": {
+      "command": "cmake",
+      "args": ["-S", "{root}", "-B", "{root}/.artifacts/native-{configuration}", "-DCMAKE_BUILD_TYPE={configuration}"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "Configure RE35 native core"
+    },
+    "re35_build": {
+      "command": "cmake",
+      "args": ["--build", "{root}/.artifacts/native-{configuration}", "--config", "{configuration}", "--parallel", "2"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "Build RE35 native core",
+      "errorformat": "%f(%l\\,%c): %m,%f(%l): %m,%f:%l:%c: %m,%f:%l: %m,%-G%.%#"
+    },
+    "re35_validate": {
+      "command": "python",
+      "args": ["tests/acceptance/run_self_development.py", "--native-build", "{root}/.artifacts/native-{configuration}", "--configuration", "{configuration}"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "Validate actual RE35 native FIFO and C++ hosts"
+    },
+    "re35_target_configure": {
+      "command": "python",
+      "args": ["tests/acceptance/run_self_development.py", "--native-stage", "configure", "--configuration", "{configuration}", "--target", "{target}"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "Configure a host-isolated RE35 native target"
+    },
+    "re35_target_build": {
+      "command": "python",
+      "args": ["tests/acceptance/run_self_development.py", "--native-stage", "build", "--configuration", "{configuration}", "--target", "{target}"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "Build only the selected RE35 native target",
+      "errorformat": "%f(%l\\,%c): %m,%f(%l): %m,%f:%l:%c: %m,%f:%l: %m,%-G%.%#"
+    },
+    "re35_target_validate": {
+      "command": "python",
+      "args": ["tests/acceptance/run_self_development.py", "--native-stage", "validate", "--configuration", "{configuration}", "--target", "{target}"],
+      "cwd": { "base": "project", "path": "." },
+      "description": "Run only the selected RE35 target's actual fixtures"
+    }
+  },
+  "projects": {
+    "re35": {
+      "name": "RE35 development",
+      "root": { "base": "project", "path": "." },
+      "source": "CMakeLists.txt",
+      "configurations": ["Debug", "Release"],
+      "targets": ["all"],
+      "default_configuration": "Debug",
+      "default_target": "all"
+    },
+    "re35_native_targets": {
+      "name": "RE35 native targets",
+      "root": { "base": "project", "path": "." },
+      "source": "CMakeLists.txt",
+      "configurations": ["Debug", "Release"],
+      "targets": ["ce_cpp", "ce_stdio"],
+      "default_configuration": "Debug",
+      "default_target": "ce_cpp"
+    }
+  },
+  "recipes": {
+    "re35_neovim_tests": {
+      "name": "RE35 Neovim regression",
+      "project": "re35",
+      "steps": [{ "id": "neovim", "tool": "re35_neovim" }]
+    },
+    "re35_native_build": {
+      "name": "RE35 native configure and build",
+      "project": "re35",
+      "steps": [{ "id": "configure", "tool": "re35_configure" }, { "id": "build", "tool": "re35_build" }]
+    },
+    "re35_native_validate": {
+      "name": "RE35 native host validation",
+      "project": "re35",
+      "steps": [{ "id": "validate", "tool": "re35_validate" }]
+    },
+    "re35_native_build_validate": {
+      "name": "RE35 native configure, build and validate",
+      "project": "re35",
+      "steps": [{ "id": "configure", "tool": "re35_configure" }, { "id": "build", "tool": "re35_build" }, { "id": "validate", "tool": "re35_validate" }]
+    },
+    "re35_native_target_build": {
+      "name": "RE35 selected native target configure and build",
+      "project": "re35_native_targets",
+      "steps": [{ "id": "configure", "tool": "re35_target_configure" }, { "id": "build", "tool": "re35_target_build" }]
+    },
+    "re35_native_target_configure": {
+      "name": "RE35 selected native target configure only",
+      "project": "re35_native_targets",
+      "steps": [{ "id": "configure", "tool": "re35_target_configure" }]
+    },
+    "re35_native_target_compile": {
+      "name": "RE35 selected native target build only",
+      "project": "re35_native_targets",
+      "steps": [{ "id": "build", "tool": "re35_target_build" }]
+    },
+    "re35_native_target_validate": {
+      "name": "RE35 selected native target validation",
+      "project": "re35_native_targets",
+      "steps": [{ "id": "validate", "tool": "re35_target_validate" }]
+    },
+    "re35_native_target_build_validate": {
+      "name": "RE35 selected native target configure, build and validate",
+      "project": "re35_native_targets",
+      "steps": [{ "id": "configure", "tool": "re35_target_configure" }, { "id": "build", "tool": "re35_target_build" }, { "id": "validate", "tool": "re35_target_validate" }]
+    }
+  }
+}

@@ -1,0 +1,701 @@
+*command-environment*  RE35 Command Environment 0.1.0 for Neovim
+
+SETUP                                                   *ce-setup*
+
+Put the complete repository on your runtimepath: >
+  require("re35").setup()
+<
+re35 is the canonical project-name facade. Legacy
+require("command_tree") returns the same API object; existing configuration
+does not need migration. Internal module and help-tag names remain compatible.
+Requires Neovim 0.11+ APIs. No plugin
+manager, language server, compiler, or UI package is required by the core.
+The plugin does not supply or replace your personal init.lua.
+No language servers are installed by setup. See |command-environment-integrations|.
+
+DOCUMENT FEATURES                                       *ce-v6-document*
+
+ef searches literal text in the originating document,
+including unsaved edits. er reviews literal replacement before explicit Apply.
+Both use the same pure Lua Document models as the optional VS Code desktop host:
+v1 for small documents and stateless paged v2 for larger documents.
+The Neovim plugin needs no native helper or compiler for these commands.
+Document identity, revision, encoding and content are revalidated. Changed
+sources and inconsistent replacement plans are rejected; the host owns review
+authorization and retains the reviewed arguments or plan.
+See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
+The optional VS Code host supports a subset of the Neovim environment.
+Version 0.1.0. See docs/compatibility.md for host support and known limitations.
+
+OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
+
+Recipe Results preserve step and child task origin; task diagnostics retain
+sequential-direct scope. Default report privacy exclusions remain unchanged.
+Rejected workspace Back preserves its return route. Stale Settings reopen is
+discarded after environment replacement or Disable.
+Host activation failure keeps the previous environment and running tasks. When
+a profile write already succeeded, the error explains that Reload is required.
+See docs/recovery-workflow.md and docs/compatibility.md.
+
+COMMAND LABELS AND REPORTS                               *ce-reports* *ce-v5.2*
+
+Settings / Commands edits command names, descriptions and argument labels through
+draft/review/Apply/Undo. In Inspect, e opens the selected command's connection.
+Stable command_links travel with profiles. Missing providers keep unavailable
+connections; Unresolved connections lists them without querying providers.
+Labels do not change handlers, argument behavior or discovery settings.
+
+Tasks f cycles All / Failed + cancelled / Pending; p previews diagnostics.
+Inside a report, o explicitly toggles bounded output, Enter chooses a destination,
+and a second Enter saves the exact reviewed snapshot without overwriting.
+Arguments, output, raw errors, paths, environment and history are excluded by
+default. Up/Down scrolls; Back returns to Tasks. See docs/configuration.md.
+
+COMPLETION AND COMMAND STATUS                            *ce-status* *ce-v5.1*
+
+Discovered global/buffer-local user Ex command arguments use native cmdline
+completion in the captured source buffer. Tab preserves surrounding arguments,
+Unicode and the suffix after the cursor. Deleted/replaced commands invalidate
+old inputs and cached completions. Callback errors retain the typed value.
+Native callbacks receive the Ex prefix through the cursor; this is not yet
+completion parity for every builtin Ex syntax. See |ce-command|.
+
+Ctrl-h opens command details from tree/search. In details, s opens a bounded
+availability report with LSP/tool/backend guidance. r rechecks, Enter returns
+without executing, and c configures a supported unavailable file/search backend.
+LSP/tool repair is manual. Return rejects changed source, command or navigation;
+running afterwards still requires explicit Enter. Nothing is auto-installed.
+
+FILES, RECIPES AND INTEGRATIONS                           *ce-v5*
+
+  \ff  Find a project file with the builtin bounded asynchronous backend.
+  \fg  Search saved UTF-8 project text; open matching locations in Results.
+
+file.find and search.project_text are stable semantic IDs. Their backend can
+be selected with profile.adapters.file_find/project_search = 'builtin' or
+'telescope'. Old picker.telescope.* IDs still work. Missing explicit backends
+remain unavailable instead of silently choosing another. Skips, scan limits
+and partial results remain visible in Tasks and Results. Saved-file results
+are revalidated before navigation; changed files require a new search.
+
+Optional profile.projects and profile.recipes declare logical projects,
+configurations, targets and finite sequential argv tasks. Project selections
+apply to recipes; legacy tool.* commands retain Current document behavior.
+Recipe Review and run checks selected saves, source/root/tool revisions and
+step ownership. Failure/cancellation stops later steps. Parent and child Tasks
+retain results. examples/cpp-cmake-recipe.json is a portable declaration for
+an existing CMake/CTest project; import preview does not install or run tools.
+examples/re35-development.json runs this checkout's regression and meaningful
+native validation. See docs/development/self-development.md for host tools.
+Its re35_native_targets project builds/validates ce_cpp or ce_stdio separately
+with host/configuration-isolated caches. Project shows observed recipe progress
+and original-choice Task/Results/retry actions. Results t returns to its owning
+Task without repeatedly adding duplicate workspace frames.
+
+Optional extension API 1 accepts structured Workspace render/action data: >
+  require('re35').setup({
+    extensions = { require('command_tree.extensions.git').new() },
+  })
+<
+Git is absent by default. Explicitly enabled, \g opens status/diff and reviewed
+whole-file stage/unstage. Closing UI, requesting cancellation and disposing an
+extension have distinct effects. Late results stay in Tasks while stale UI
+updates are rejected. Conflicts, renames, submodules and clean filters have
+explicit file-action limitations. See docs/extensions-v1.md.
+
+lua/command_environment/core contains a pure Lua 5.1 command data model and a
+minimum request engine. Neovim keeps rendering, input, LSP, History, persistence
+and processes in command_tree. An optional C ABI embeds the same Lua sources
+for C++/C# console hosts; Neovim does not need a compiler, .NET or native DLL.
+See docs/portable-core.md, docs/project-recipes.md and docs/file-search.md.
+
+RE35 opens only at the explicit entry boundary (default \ in Normal/Visual).
+It does not install automatic g/z/operator/leader guide triggers. Ordinary
+editor mappings outside that prefix keep their native execution behavior.
+The entry claims existing root and descendant mappings without a prefix delay;
+their originals remain available in the imported guide (ki). Disable restores
+them. Native Ex command entry (:) remains available independently.
+
+KEYS                                                    *ce-keys*
+
+  \                 Open / close the command environment.
+  Esc/Left/BS       Back one level; close at root, outside editable fields.
+  /                 Search commands; inside a picker, filter its choices.
+  ?                 Cycle Full / Compact / Minimal in navigation/workspaces.
+  F1                Same density cycle, including editable fields.
+  Ctrl-r / Ctrl-b   Recent / favorite commands (from tree navigation).
+  Ctrl-f            Toggle favorite of the selected search result.
+  Ctrl-w            Workspace selector (from tree/workspace navigation).
+  Ctrl-l            Command words mode: ID, alias or configured word path.
+  Ctrl-h            Inspect selected command, provider, arguments and reason.
+  Up/Down           Select an item.
+  Enter/Right       Accept the selected item, outside editable fields.
+  1..9              User-assigned root slots; never automatically reordered.
+
+Editable search, text and picker-filter fields treat ? as text. Use Ctrl-v to
+insert a reserved literal key such as \; F1 changes the view in editable fields.
+Key Guide inherits the current density. Unclaimed ? or F1 changes its view;
+an actual native/mapped key keeps its original meaning, including native g?.
+Esc or Backspace in Key Guide cancels the native sequence and closes the guide.
+Native Key Guide retains mapped arrow/Space behavior. Elsewhere Space does not
+execute a command. It remains a literal space in editable fields and a toggle
+in multiselect. Search, words and filter fields retain Left/Right caret movement
+and Backspace deletion; Esc leaves that input instead.
+
+Input fields: Enter accepts; Esc returns to the previous field; Ctrl-s skips
+an optional field. Text supports arrows/Home/End, Ctrl-a/e, Ctrl-u/w, BS/Del,
+Tab completion cycling and Up/Down per-field history. History is in memory
+only, at most 20 entries per command/field; secret/history=false disables it.
+Paste is routed to the active field, never the originating document. Single
+line fields reject multiline paste. Streaming paste is bounded to 1 MiB.
+Select uses j/k or Up/Down; Enter/Right accept; / starts filtering.
+Esc leaves filtering before leaving the picker. Backspace deletes text while
+filtering and acts as Back outside that input. Multiselect uses Space to toggle,
+Enter to accept.
+
+Full shows descriptions and help. Compact is a short single-column list with a
+selection and any selected unavailability reason; longer metadata is available
+with Ctrl-h. Minimal has no border, title, footer or help labels. It keeps only the
+path/input/selected content and any result or error needed to use the session.
+Minimal adds two horizontal cells when space permits and no empty vertical rows. Workspace
+outer frames remain visible at every density, including Minimal.
+
+Named presentation presets preserve the selected Results source coordinate and
+originating Task even when optional details/status are hidden. Task detail and
+report screens retain their owned Task identity while scrolling. These facts
+wrap within the viewport; an unrepresentable source/owner fact is reported as
+incomplete. Ordinary source navigation keeps its existing validation. Input and
+Apply still refuse incomplete required input/review facts. Results filter Esc
+restores its previous filter, cursor and selected result when it still exists.
+
+The optional VS Code host now updates appearance on the same native form. Its
+View button cycles Full, Compact, Minimal and named presets without accepting
+input, applying a review or saving presentation data. Text, selected items and
+the live workflow owner remain in place. Information rows are inspectable;
+execution or Apply requires an explicit action. Native geometry, colors and
+icons retain reported host fallbacks. Neovim's existing saved mode selection and
+session-only cycling during a pending Settings draft are unchanged.
+See docs/presentation-presets.md and tests/fixtures/presentation-inspection.json.
+
+Important paths (after \):
+  fs fo fr          Save / open / recent files
+  bb bn bp bd       Buffer picker / next / previous / delete
+  ws wv ww wc       Split / vertical split / window picker / close
+  dn dp dd          Next / previous / diagnostic picker
+  dl db             All-buffer / originating-buffer diagnostics in Results
+  ca cf cr cs       Code action / format / rename / language-server status
+  cd cD ct ci       Definition / declaration / type definition / implementation
+  cR co ch          References / document symbols / hover
+  ef er             Find literal text / review literal replace in this document
+  es                Substitute with preview and explicit Apply
+  h                 History workspace
+  rt rc             Tasks workspace / cancel a running task
+  rr rl             Host build-and-run / build results, when integrated
+  sut (also ut)     Theme picker
+  sud (also ud)     Command UI density
+  sl sk             Buffer language / fixed quick slots
+  ki                Original mappings captured under the entry prefix
+  s rp lo           Settings / Project / Results workspaces
+  sb sa sw sh       Assign path / alias / words / show or hide a command
+  slm slu slg slr   Move / unbind / group / restore default layout
+  sc svn sve svc    Workspace key / create / appearance / contents
+  spe spi           Export / review and import a portable JSON profile
+  sue sui           Export / review and import Neovim UI settings only
+  stn ste           Create / edit a declarative PATH tool
+  sns lp            Save completed task inputs / run saved inputs
+
+A tree with no visible selection uses its first Enter/Right to highlight the
+first item on the current page, without execution. A second accept runs the
+visible selection. Typed leaf paths still execute directly. A changed selected
+command is rejected until it is selected again.
+
+A branch can itself be executable: its own command appears as a selectable
+item alongside its children. Select it and press Enter/Right to execute;
+subsequent path keys still enter the branch's children. There is no SPC command.
+Words mode uses Tab completion and Enter for an exact/selected command. It is
+entered explicitly inside the environment; ordinary Normal-mode typing is not
+intercepted. Unknown or unavailable commands show a reason and do not execute
+a different command.
+
+COMMAND CONTRACT                                        *ce-command*
+
+Stable IDs identify behavior. Tree bindings are separate and may have multiple
+paths per ID. Commands can have children; groups alone do not execute.
+Exactly one of run, workspace or session_action is required. Example: >
+  local ce = require("re35")
+  ce.register({
+    id = "editor.wrap", name = "Toggle wrapping", path = { "w", "r" },
+    aliases = { "wrap" },
+    run = function(ctx) vim.wo[ctx.win].wrap = not vim.wo[ctx.win].wrap end,
+  })
+  ce.bind({ "u", "w" }, "editor.wrap")
+  ce.execute("editor.wrap")
+<
+ctx captures buf, win, cursor, changedtick, filetype, mode, count, register and
+optional selection. Execute actions against ctx, not a later current buffer.
+stable_target=true rejects document changes during an operation or prompt.
+available(ctx) returns true, or false and an actionable reason. Exceptions
+become unavailable/error messages. Unavailable commands remain discoverable.
+
+Synchronous run(ctx,args,done,invocation) succeeds when it returns normally;
+return false,reason to fail. For asynchronous work set async=true and call
+done(true,result) only after completion; done(false,reason) on failure.
+nil or "Cancelled" detail denotes cancellation. Duplicate/late completion is
+ignored. Concurrent execution of the same command in the same buffer is
+rejected. Finished history keeps at most 100 operations; pending work remains.
+Structured failures keep their original operation detail while showing a short
+error and exit code in every density; callback completion is still implemented.
+
+Register cancellation with invocation:on_cancel(function) before starting work
+which could throw, or return that function from run. A hook returning false,
+reason or throwing leaves explicit cancellation pending and reports the error.
+Cancellation must actually stop/release the backend's resources. The optional
+hook return value "pending",reason acknowledges a stop request while retaining
+the operation until the backend calls done(false,"Cancelled"). The personal
+C/C++ runner uses this to wait for an actual process exit before releasing its
+source-file lock. Other successful hook returns complete cancellation immediately.
+An optional timeout_ms fails the logical operation and requests cleanup; it cannot force
+an arbitrary external backend to stop. Backend effects cannot be rolled back
+generically. Built-in adapters validate targets and implement their own cleanup.
+
+Dynamic prompts use the same session: >
+  ce.register({
+    id = "example.choose", name = "Choose a label", async = true,
+    run = function(ctx, args, done, invocation)
+      invocation:input({ prompt = "Label", required = true }, function(label)
+        if not label then done(false, "Cancelled"); return end
+        invocation:select({ "one", "two" }, { prompt = label }, function(value)
+          if not value then done(false, "Cancelled"); return end
+          done(true, { label = label, value = value })
+        end)
+      end)
+    end,
+  })
+<
+Only one prompt may be pending per invocation. select options.format_item(item)
+returns a label; preview(item,ctx) optionally returns a cleanup function. The
+selection callback receives the original item and original one-based index,
+even after filtering. Prompt callbacks are guarded against stale targets and
+late/duplicate results. Cleanup occurs before callbacks. Closing a pending
+prompt cancels that request; closing a UI around background work leaves work
+running. Missing handlers, callback exceptions and timeouts are explicit errors.
+
+ARGUMENTS AND PREVIEW                                   *ce-arguments*
+
+arguments is an array of fields: name, prompt, kind, required, default,
+validate(value,ctx,args), items, completion, secret, history. default and items
+may be callbacks(ctx,args). Supported kinds:
+  text / path         Strings; path defaults to file completion.
+  number              Finite number, optional integer/min/max constraints.
+  boolean             true/false picker.
+  select              Primitive items or {label=..., value=...} entries.
+  multiselect         Array of selected values, preserved across filtering.
+
+completion is a Neovim completion name or function(text,ctx,args,edit)->string[].
+The optional edit.cursor is a character index. An optional second return may
+contain cursors (one character index per replacement string) and validate
+(function returning true before application, including cached Tab cycling).
+Existing three-argument callbacks and unrelated second returns remain supported.
+validate returns true or false,reason; it runs in the captured source window.
+Commands invoked with provided arguments are validated again before execution.
+Choices are rechecked against the current items to reject deleted entries.
+secret masks the input display and operation metadata and disables history;
+it does not promise cryptographic erasure or constrain an extension's logging.
+
+preview(ctx,args) may return a cleanup function. Preview runs after input changes.
+Cleanup precedes the next preview, commit or close. Commit must apply the final
+change itself. Preview cleanup failures are reported; arbitrary extension side
+effects are the extension's responsibility. A failed command keeps its inputs
+and navigation context. Successful ordinary commands close a tree session;
+commands invoked from a workspace can return to that workspace. Multiple
+declared fields have an Edit/Run review before dispatch.
+
+Closing a declared input stores a bounded, in-memory draft per command/buffer.
+Reopening restores compatible missing fields; explicitly supplied values win.
+Secrets, transient commands and backend-created callback prompts are excluded.
+Successful execution clears its draft. Drafts do not survive setup/restart and
+are never included in a portable export. At most 16 drafts of 64 KiB are kept.
+
+WORKSPACES                                              *ce-workspaces*
+
+ce.register_workspace({id,name,path,icon,color,actions,bindings,enter,suspend,
+resume,leave,draw,handle}) registers a workspace and its command. A frame has
+data/view/ctx. actions maps stable action IDs to {label,run} or {label,command};
+bindings maps single keys to action IDs. Availability and hook failures are
+reported. The visible help is generated from the effective bindings.
+Hooks receive (frame,ctx,session,options), except handle receives
+(frame,key,ctx,session,options) and returns true if it consumed the key.
+UI views/timers belong to frame lifecycle; jobs belong to their backend.
+Pushing suspends the previous frame; Esc pops and resumes it; closing leaves
+all frames without resuming covered ones. Hook failures are isolated/reported.
+Reopening the current workspace does not duplicate its stack entry. A workspace
+chosen from the selector returns to that selector on Back, retaining selection
+and filter; leaving the selector restores its previous caller.
+
+Results remembers source/filter/caret/preview and selected ID per source window.
+Tasks remembers selected operation/detail/scroll globally in the current setup.
+Command Boards remember selected command ID per buffer. Reentry reads fresh
+records and creates new views/timers/context; removed items cannot be executed
+from cached rows. Explicit source/scope/task changes reset conflicting filters.
+Custom workspaces opt in with state_fields={"selected","selected_id"} and
+state_scope="window", "buffer" or "global". At most 64 snapshots keep only
+bounded scalar fields (16 fields, 4096 bytes per string). Call
+frame.manager:forget_state(id) to reset one workspace or omit id to reset all.
+No state is written to portable profiles. Replacement/setup and failed cleanup
+invalidate snapshots. History's undo tree is always rebuilt, never cached as UI.
+Targeted panels fit within the originating split including their own border.
+If a source is too small for that border, only the panel border is omitted;
+the surrounding workspace frame remains. Tiny panels prioritize actual errors.
+
+History defaults to the bottom-right of the originating editor window. Its
+outer frame remains pink #E6A0A0 in all densities; Minimal removes only the
+small panel border. u/r undo/redo, t opens Timeline, Enter/Right restores the
+selected state and stays in Timeline. Parent/alternate branch relations, the
+current state (Enter marker) and next redo target (circular arrow) are distinct.
+Preview shows the selected sequence in an isolated shadow buffer, including
+alternate branches. R refreshes without undo/redo/restore and keeps a still-valid
+selected sequence. External edits clear stale previews; the first stale Restore
+is rejected. A selected sequence is remembered per buffer in bounded memory,
+but reopening History never automatically restores a state. The list refreshes
+after restore. history.timeline_stay_open=false exits Timeline after restore;
+history.position overrides placement. require('re35').version is
+'0.1.0'.
+Tasks uses a theme color; j/k selects, Enter details, Esc returns, x/Ctrl-x
+cancels explicitly; r reruns a completed operation, s returns to its source.
+For failed recipes, c opens owned source Results or relevant step Settings.
+v reviews the original recipe/configuration/target with current tool argv and
+requires an explicit launch decision. It preserves the current Project choice
+and memory. Return to the original source window first. Ordinary r refuses a
+changed tool definition; v leaves that retained task unchanged. Fixed-context
+review rejects changed declarations and physical project/source identities.
+f filters All / Failed + cancelled / Pending; p previews a task report. Report
+Enter chooses a destination then saves after explicit review. Output is excluded
+unless o includes it in a fresh review. Existing destinations are never replaced.
+F requests hard termination of the owned scope after its cancellation grace.
+Cancellation and timeout remain pending until backend exit is acknowledged;
+repeated cancellation does not dispatch another signal. Partial stdout/stderr
+and source locations remain available after cancellation or timeout.
+By default this backend confirms the direct process only; descendants are
+unknown. An explicit absolute process_helper path enables a Windows Job or
+Linux anchored group. Assignment/ownership precedes tool execution; completion
+reports observed scope termination. Deliberately detached daemons/services are
+excluded. A missing configured helper refuses execution without downgrading.
+See docs/development/process-ownership.md. Local tool_overrides
+may set positive timeout_ms/cancel_grace_ms values. These are local settings.
+Completed records can be
+reopened; result text is bounded
+in the panel. A 500 ms timer runs only while Tasks is visible. Other workspaces
+derive colors from the current theme unless a color is supplied.
+Ordinary buffer commands require their original named buffer when rerun.
+Project processes keep a separate input-file/root/cwd/argv target and can rerun
+from another source or header without silently substituting the current file.
+The saved task must be Normal; Visual/Select must be left first, and saved
+selections need reselection. Modified ordinary files in the original project
+are reviewed before replay: select files to save, run saved files, or go back.
+No other project's files are saved. Each selected native write is rechecked;
+write failure starts no process. Earlier successful selected writes are retained.
+Process tools retain their configuration signature. Changed tool definitions,
+missing sources, project roots or resolved cwd require a new review in Project.
+Reentered input forms keep the execution context supplied by the original task.
+ce.rerun(id, {save='saved'}) explicitly runs saved files; save='selected' with a
+buffers array saves only those reviewed modified buffer IDs. The default asks.
+ce.return_task_source(id) uses the current validated window, not an old handle.
+ce.force_cancel(id) requests force termination; it does not claim completion.
+
+Tasks o opens source locations for the selected finished operation in Results.
+The task owns its location snapshot; native quickfix/location lists are preserved.
+Empty/unconfigured/parser-error states explain their cause and keep raw output
+in Tasks. Results reads fresh retained records, filters/previews them and checks
+that the file still exists before closing UI to jump. Its Back returns to Tasks.
+ce.open_task_results(operation_id) is the equivalent public API.
+
+Results (lo) reads native diagnostics, quickfix and location lists without
+replacing them. d/q/l select the source, f filters, p previews and Enter jumps.
+dl opens all-buffer diagnostics directly; db opens only the originating buffer.
+Empty diagnostics remain visible with "No diagnostics" instead of closing.
+Next/previous diagnostic closes the command UI before showing Neovim's native
+diagnostic float. A changed diagnostic selection requires a fresh review.
+The source window owns the location list. Lists are bounded to 5000 items and
+rechecked before navigation; a changed selection is not silently reused.
+Language-server status (cs) stays in the environment as an internal picker,
+including missing-server and host readiness messages, without a native split.
+Project (rp) lists host run actions and declared tool.* commands. Settings (s)
+shows actual UI, command, tool and workspace values. Enter edits the selected
+value in a staged draft. Review shows before/after in every density; a applies,
+x discards and u undoes one of the last ten editor Applies, including moved
+runtime paths. Closing/discarding does not save
+the draft. Apply detects changes since editing started, preserves unrelated
+runtime bindings and returns to the same Settings section. Undo is bounded and
+refuses to overwrite newer external changes. R reloads a valid saved profile
+without writing it; discard a pending draft before reloading. Missing, corrupt
+or unsupported files keep the current environment. UI / Theme uses the existing
+preview/commit picker separately from the portable profile and Settings Undo.
+UI / Reset all UI overrides stages removal of all UI overrides together. Enter
+or d opens the normal review; a applies, x discards and u restores after Apply.
+Defaults inherit local setup and saved density preferences. Other staged
+sections remain in the draft; the editor theme is handled separately.
+UI / Export UI settings writes the eight applied UI values to a new JSON file
+in an existing directory. Settle pending Settings drafts first. Existing files,
+RE35 storage and named source buffers are protected; export returns to Settings.
+ce.export_ui() reads a detached snapshot; ce.export_ui(path) saves it. This is
+UI-only export, separate from portable profile export.
+UI / Import UI settings (sui) reads that bounded Neovim JSON file and previews
+effective Before/After values. a applies, x discards and u restores prior
+overrides after Apply. Pending drafts must be settled first. Invalid files,
+duplicate JSON fields, symlinks and changes during reading are refused.
+Apply commits the reviewed snapshot; later file changes cannot alter it.
+Theme, commands, workspace overrides and saved preferences remain separate.
+Commands / Slots 1-9 and Word paths select command names/IDs through searchable
+pickers. Workspace / Local keys chooses existing actions and edits/removes keys,
+disables inherited keys or resets their overrides through the same draft.
+Portable user Boards can edit their command order, provider source order and
+filters with a configuration preview that executes no command or plugin query.
+Native History/Tasks/Results contents stay owned by their definitions.
+Missing command IDs/providers remain in the profile with explanatory labels.
+More commands retains the original
+profile/Workspace/tool creation and import/export commands. No project build
+system is inferred automatically.
+ce.ui_defaults() reads inherited UI values, ce.runtime_bindings() reads copied
+session bindings, and ce.reload_profile() provides the same read-only reload.
+
+Portable tools may declare errorformat to parse stdout/stderr into task-owned
+file/line/column locations. Parsing uses the captured task cwd, never the current
+editor cwd, and does not change native result lists. Without errorformat the
+tool keeps its output only. Example profile fragment: >
+  tools = {
+    cpp_check = {
+      command = "g++", args = {"-fsyntax-only", "-fno-diagnostics-color", "{file}"},
+      cwd = {base = "project", path = "."},
+      errorformat = "%f:%l:%c: %t%*[^:]: %m,%f:%l: %t%*[^:]: %m",
+    },
+  }
+<
+Executable names resolve on PATH. Machine paths belong only in tool_overrides.
+Output capture is bounded to 1 MiB and locations to 5000; truncation is reported.
+No parser is guessed and no compiler is installed. GCC diagnostic locale/format
+must match the explicitly configured errorformat. See |errorformat|.
+
+Portable workspace templates are boards mixing stable command IDs and native
+result sources. Example mutation (this replaces the templates list): >
+  ce.update_profile(function(data)
+    data.workspaces.templates = {
+      { id = "development", name = "Development", path = { "v" },
+        commands = { "file.save", "code.format" },
+        sources = { "diagnostics", "quickfix" },
+        keys = { y = "command:file.save" } },
+    }
+    data.workspaces.overrides.history = {
+      name = "Undo history", keys = { u = false, z = "undo" },
+    }
+  end)
+<
+Overrides support name/color/icon/path/order/hidden/keys. color is #RRGGBB;
+path is a command-tree key sequence. keys values are action IDs or false.
+Boards expose execute, refresh, next, previous, page_up, page_down and
+command:<command ID> actions. Common controls cannot be rebound to unrelated
+actions. sc accepts reset (remove override) or disable (false) as its action.
+Missing provider IDs and missing workspace overrides remain stored.
+
+PERSISTENCE AND EXTENSIONS                              *ce-persistence*
+
+Default state files live under stdpath('state')/command-tree/. Portable settings
+use profile.json; recent command IDs use a separate bounded usage store.
+Density, favorites and fixed slots belong to the profile. Writes use atomic
+replacement, ownership locks and the latest durable data. Corrupt files and
+future schemas are preserved and reported. Lock age alone does not authorize
+deletion; a proven dead local owner can be recovered. A busy lock fails
+explicitly. A failed density save still retains the selected view in the current
+process. Use
+ce.persistence_status() or :checkhealth command_tree for errors/paths.
+profile.path=false keeps the profile in memory; usage.path=false controls recent
+history. Setting usage.path=false and preferences.path=false with no explicit
+profile path also keeps the profile in memory for isolated configurations.
+
+For an interrupted lock recovery, inspect both ownership records: >
+  local store = require("command_tree.state_store")
+  local path = ce.persistence_status().profile.path
+  local lock = store.inspect_lock(path)
+  local guard = store.inspect_recovery(path)
+  -- Only after verifying these observed owners have exited:
+  store.recover_lock(path, {
+    token = lock.token, recovery_token = guard.token,
+  })
+<
+Known active owners are never removed, even with force=true. Unknown/legacy
+ownership requires explicit force and the exact observed token after checking
+other editors; a changed token refuses recovery. Recovery guards have their
+own ownership/token, rather than relying on their age.
+
+ce.set_slot(1,"file.save"), ce.slots(), ce.bind(path,id), ce.unbind(path),
+ce.unregister(id), ce.refresh(), ce.registry(), ce.operations(), ce.cancel(id)
+are public APIs. bind/unbind are runtime overlays, retained through unrelated
+profile mutations; explicit profile import or reset_layout clears that overlay.
+Runtime register/unregister survive profile reactivation. A fresh setup may
+replace runtime declarations. Persistent custom tree bindings can be declared
+in setup.bindings, e.g.: >
+  bindings = {
+    { path = { "f", "w" }, id = "file.save" },
+    { path = { "f", "s" }, id = false }, -- remove this placement
+  }
+<
+Bindings survive temporary provider absence; unresolved IDs never execute a
+different command. Registering the ID again restores its existing placements.
+Session control keys/root slots cannot be rebound to unrelated commands.
+An invalid setup preserves the previous working registry/session/keymaps/jobs.
+
+User Ex commands are discovered in search. Metadata supplies arguments, range,
+count and bang; execution rechecks buffer-local shadowing and rejects extra
+commands. Set providers.ex_builtin=true to also import native Ex commands.
+Opaque third-party UI/async behavior needs an explicit adapter for full internal
+flow/completion guarantees. :CommandEnvironmentRefresh refreshes late providers.
+Key Guide discovers native commands and mappings; it does not promise semantic
+command adapters for every third-party mapping.
+
+PORTABLE PROFILES                                       *ce-profile*
+
+Profile version 1 contains layout bindings/groups/aliases/hidden/word_paths,
+workspace overrides/templates, presets, adapter choices, tool declarations,
+command_links, slots, favorites, UI settings and requirements. It is JSON data only: no Lua
+callbacks, runtime buffer/window/job IDs or machine absolute paths. Declared
+secret arguments cannot be saved as presets. Drafts and recent runtime history
+are excluded. Machine tool paths belong in setup.tool_overrides and are not
+exported. Stable command IDs remain distinct from their tree placements.
+
+spe exports; spi chooses merge/replace, shows changes/unresolved requirements,
+then requests Apply. Missing references remain stored; import never installs
+tools or runs declarations. merge combines keyed entries and uses incoming
+values for matching keys; replace replaces the portable profile. Malformed
+or unsupported future profiles fail without replacing the active environment.
+An import reviewed before another editor's save is refused; review again.
+
+Public API (paths are interpreted relative to the current working directory): >
+  local ce = require("re35")
+  ce.profile()                         -- defensive copy
+  ce.export_profile("ce-profile.json") -- or no path to return data
+  local review = assert(ce.preview_profile("ce-profile.json", "merge"))
+  -- Inspect review.details and review.unresolved before applying.
+  assert(ce.apply_profile(review.profile, "replace", review.base_profile))
+  ce.update_profile(function(data)
+    data.layout.word_paths["dev format"] = "code.format"
+    data.layout.aliases.fmt = "code.format"
+  end)
+  ce.reset_layout()
+  ce.save_preset("some.stable.id", "Name", { argument = "value" })
+<
+preview_profile accepts data or a JSON path and makes no mutation. Pass its
+base_profile to apply_profile for optimistic concurrency. update_profile
+validates the new configuration while holding the durable transaction; invalid
+mutations preserve disk, registry and mappings. reset_layout restores saved
+paths/groups/aliases/words/hidden and runtime bindings, retaining workspaces,
+tools, favorites and slots. Presets require a stable registered command.
+
+PROJECT TOOLS                                          *ce-tools*
+
+Tools are optional argv processes, not shell command strings. A declaration
+creates tool.<logical name> and appears in Project. Example: >
+  ce.update_profile(function(data)
+    data.tools["cpp-check"] = {
+      command = "g++",
+      args = { "-std=c++20", "-Wall", "-fsyntax-only", "{file}" },
+      cwd = { base = "project", path = "." },
+      description = "Check current C++ file",
+    }
+  end)
+<
+command is a PATH name; args is a string array with {file}/{root} placeholders.
+cwd.base is project/config/home with a relative cwd.path. Project root searches
+.git, compile_commands.json, CMakeLists.txt, package.json, Cargo.toml and
+pyproject.toml, then falls back to the source directory/current working folder.
+{file} requires a named source file. Setup never installs or invokes tools.
+Availability is rechecked before execution. Output is bounded to 1 MiB; Tasks
+stores completion/exit status. Cancellation waits for the process exit callback.
+Use setup.tool_overrides[logical_name] for local command/args/cwd overrides;
+an args override replaces the entire argv array and is excluded from exports.
+
+OPTIONAL PLUGIN ADAPTERS                                *ce-plugin-adapters*
+
+profile.adapters.format = "lsp" uses attached LSP clients (default).
+"conform" selects the bundled Conform adapter, without enabling LSP fallback.
+profile.adapters.picker = "telescope" adds ff/fg/bf for files/grep/buffers.
+Telescope keeps its own UI and selection lifecycle: handed_off is not proof
+of a completed selection. Discovery does not load/install these plugins.
+Configure explicit lazy loaders or options via: >
+  integrations = {
+    format = require("command_tree.integrations.conform").new({}),
+    picker = require("command_tree.integrations.telescope").new({
+      load = function() --[[ Host-owned loading ]] end,
+      options = {},
+    }),
+  }
+<
+Missing plugins or unsupported operations report a reason. An explicit adapter
+failure does not silently switch to another backend. Custom plugin operations
+can instead use ordinary stable-ID commands; see |ce-command|.
+
+HOST SUPPORT AND LIMITS                    *ce-compatibility* *ce-validation*
+
+Neovim is the primary host. The optional VS Code desktop host supports a
+documented subset, and native console examples demonstrate core embedding.
+See docs/compatibility.md for requirements and known limitations, and
+docs/command-coverage.md for supported workflows.
+
+The optional Git workspace has explicit file-action limits;
+see docs/extensions-v1.md. Complete debugger workflows and universal Ex
+replacement are future work. Optional integrations require their configured
+tools or plugins; discovery does not install them.
+
+DOCUMENT WORKFLOW                                       *ce-document*
+
+ef searches single-line literal text, case-sensitively and without overlapping
+matches. It reads the captured buffer, including unsaved changes, and opens CE
+Results. Locations carry the original document revision; edit or rename the
+source and run a new search instead of navigating an old result.
+
+er prepares literal replacements against the captured document. Review keeps
+source text unchanged; Cancel is the default. Apply requires an explicit choice
+and the live host-owned review. The exact reviewed plan is retained
+privately and bound to that environment and source context. Execution captures
+the source again and validates the plan and unchanged URI/revision/content
+before one buffer edit. Large-document reviews retain a compact edit plan.
+Supplying all arguments through an API cannot bypass the preview/review flow.
+No file save is implied. The host owns the actual edit and undo. & and backslashes
+are ordinary replacement text;
+this command does not evaluate Vim patterns, expressions or capture references.
+
+Small documents retain Document v1 bounds: 2000 lines, 256 KiB UTF-8 source;
+find text at most 4096
+bytes; at most 1000 replacement matches and 1 MiB proposed output. Search
+defaults to 200 results, with a maximum of 1000; transport bounds may truncate
+results sooner. Lines and find/replacement text cannot contain CR, LF or NUL.
+Above the v1 source bounds, ef/er use Document v2: at most 10,000 lines and
+1 MiB of UTF-8 line-content bytes, excluding line separators; each line at most
+64 KiB. Complete-line pages preserve absolute document coordinates. Search
+retains at most 200 locations with bounded excerpts. Replacement permits at
+most 4096 edits, a 512 KiB compact plan and 1 MiB output. Escaped requests must
+also fit the unchanged 1 MiB transport bound. Processing has a five-second
+budget per stage, checked at page boundaries. Incomplete search is explicitly
+reported; incomplete or over-budget replacement is refused without an edit.
+No regex or multiline semantics are added. The public Document.snapshot API
+remains v1; docs/document-v2.md defines the additive contract.
+Coordinates are zero-based and end-exclusive in an explicit utf-8/utf-16/utf-32
+unit. Hosts convert them to editor coordinates without splitting a character.
+The core never writes a buffer, file or undo history by itself.
+
+SUBSTITUTION LIMITS                                    *ce-substitute*
+
+es supports single-line Vim regex and literal replacement text. &, \1 and \=
+are literal replacement text, never evaluated. Scope is current line, whole
+selected lines, or buffer. Preview shows deleted lines and replacement virtual
+lines; source text and undo history stay untouched until Apply=true.
+Commit is one undo step; stale/read-only buffers fail before mutation.
+Bounds: 2000 lines, 256 KiB source, 8 KiB per line, 512-byte pattern, 4 KiB
+replacement, 20k matches, 1 MiB output; at most 100 preview lines. Narrow the
+scope for larger documents. Multiline and capture-expanding replacements are
+not supported by this command; native Ex remains available separately.
+
+vim:tw=78:ts=8:ft=help:norl:
+
+
+
+
+

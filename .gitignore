@@ -1,0 +1,29 @@
+# Generated builds and local test evidence.
+/build/
+/build-*/
+/dist/
+/.artifacts/
+/.validation/
+**/bin/
+**/obj/
+__pycache__/
+*.py[cod]
+/.venv/
+/venv/
+
+# Editor and host-local state.
+*.swp
+*.swo
+*~
+/.idea/
+/.vscode/
+/.DS_Store
+Thumbs.db
+/nvim.log
+/.nvimlog
+/doc/tags
+
+# Local overrides and package-manager caches.
+.env
+.env.*
+/node_modules/
