@@ -9,7 +9,7 @@ workflow semantics. Hosts connect those definitions to their UI, editor services
 and tools. Portable profiles carry user declarations; supported operations and
 live task history depend on the host.
 
-**Version 0.2.0.** Neovim is the primary host.
+**Version 0.2.1.** Neovim is the primary host.
 The optional VS Code desktop development host supports a defined subset of
 document and project workflows. See [command coverage](docs/command-coverage.md)
 and [compatibility](docs/compatibility.md) for supported scope and limitations.
@@ -30,6 +30,7 @@ Press `\` to open RE35; ordinary Normal-mode keys remain available before entry.
 
 0.2.0 adds remembered themes, consistent list navigation, clearer
 storage/error feedback and a stable command panel with separate details.
+0.2.1 fixes availability diagnostics and improves shortcut and text readability.
 
 ## Install
 
@@ -38,7 +39,7 @@ With lazy.nvim, pin the version you want to use:
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.2.0",
+  tag = "v0.2.1",
   config = function()
     require("re35").setup()
   end,

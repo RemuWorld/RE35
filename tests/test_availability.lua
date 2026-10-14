@@ -43,7 +43,11 @@ H.eq('lsp_capability_missing', report().code, 'attached but unsupported differs 
 H.eq(false, host_ready(ctx), 'host readiness cannot supply an unsupported attached capability')
 attached[1].supports_method = function() return true end
 H.eq(true, host_ready(ctx), 'attached capability wins when actually available')
-H.eq('ready', report().code, 'supported capability is ready')
+local supported = report()
+H.eq('ready', supported.code, 'supported capability is ready')
+H.eq(nil, supported.reason, 'a ready capability has no failure reason')
+H.ok(table.concat(supported.lines, ' '):find('Available in the captured source', 1, true), 'ready status has an affirmative explanation')
+H.ok(not table.concat(supported.lines, ' '):find('Availability inspection failed', 1, true), 'ready status never reports an inspection failure')
 H.eq(1, report().supporting, 'supported client counted')
 local receipt, guard = capture()
 H.ok(receipt and guard, 'read-only status captures a return receipt')
@@ -96,9 +100,18 @@ local function test(spec)
   registry:register(spec)
   return A.report(registry:get(spec.id), ctx, registry)
 end
-H.eq('executable_missing', test({ id = 'tool.build', name = 'Build', provider = 'project', backend = 'process',
-  available = function() return false, 'Executable is not available: compiler' end, run = function() executed = executed + 1 end }).code,
-  'missing executable differs from LSP or backend')
+H.eq(nil, test({ id = 'fixture.always_ready', name = 'Always ready', run = function() executed = executed + 1 end }).reason,
+  'a command without an availability hook has no failure reason')
+H.eq(nil, test({ id = 'fixture.ready_boolean', name = 'Ready boolean', available = true,
+  run = function() executed = executed + 1 end }).reason, 'boolean-ready commands have no failure reason')
+local unavailable = test({ id = 'fixture.unavailable', name = 'Unavailable', available = false,
+  run = function() executed = executed + 1 end })
+H.eq('unavailable', unavailable.code, 'a disabled command remains unavailable')
+H.eq('Unavailable in this context', unavailable.reason, 'a disabled command keeps its actual context reason')
+local missing_executable = test({ id = 'tool.build', name = 'Build', provider = 'project', backend = 'process',
+  available = function() return false, 'Executable is not available: compiler' end, run = function() executed = executed + 1 end })
+H.eq('executable_missing', missing_executable.code, 'missing executable differs from LSP or backend')
+H.eq('Executable is not available: compiler', missing_executable.reason, 'the real unavailable reason is retained')
 local missing = test({ id = 'file.find', name = 'Find', backend = 'unconfigured',
   available = function() return false, 'Selected file_find backend is not configured: unconfigured' end,
   run = function() executed = executed + 1 end })
@@ -107,8 +120,18 @@ H.ok(missing.backend_settings, 'existing reviewed backend repair is available')
 H.eq('formatter_unavailable', test({ id = 'code.format', name = 'Format', provider = 'lsp', backend = 'Conform',
   available = function() return false, 'Conform has no available formatter for this buffer' end,
   run = function() executed = executed + 1 end }).code, 'formatter status does not falsely claim missing LSP')
-H.eq('condition_error', test({ id = 'broken', name = 'Broken', available = function() error('provider failed') end,
-  run = function() executed = executed + 1 end }).code, 'throwing availability callback has a separate status')
+local broken = test({ id = 'broken', name = 'Broken', available = function() error('provider failed') end,
+  run = function() executed = executed + 1 end })
+H.eq('condition_error', broken.code, 'throwing availability callback has a separate status')
+H.ok(broken.reason:find('provider failed', 1, true), 'callback errors retain their actual diagnostic')
+local registry_available = registry.available
+registry.available = function() error('registry inspection failed') end
+local failed_inspection = A.report(registry:get('fixture.always_ready'), ctx, registry)
+registry.available = registry_available
+H.eq(false, failed_inspection.available, 'an inspection exception cannot advertise availability')
+H.eq('condition_error', failed_inspection.code, 'an inspection exception retains its failure classification')
+H.ok(failed_inspection.reason:find('Availability inspection failed:', 1, true), 'the inspection failure has an explicit explanation')
+H.ok(failed_inspection.reason:find('registry inspection failed', 1, true), 'the original inspection exception remains visible')
 registry:register({ id = 'code.format', name = 'Format', provider = 'lsp', backend = 'LSP', replace = true,
   available = Lsp.available(function(c) return c.selection and 'textDocument/rangeFormatting' or 'textDocument/formatting' end, true),
   run = function() executed = executed + 1 end })

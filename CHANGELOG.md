@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.2.1
+
+- Fix availability diagnostics showing a failure reason for ready commands.
+- Group shortcut hints and keep complete key combinations together on wrapping.
+- Use consistent command-label and navigation-accent colors, readable description
+  and target text, and distinct error/warning highlights.
+- Preserve existing settings, bindings, theme persistence and custom highlights.
+
 ## 0.2.0
 
 Neovim usability improvements based on independent feedback.

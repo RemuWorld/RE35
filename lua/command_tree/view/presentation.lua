@@ -307,22 +307,26 @@ function P.draw(V, view, data, opts, groups)
     if review then required_line(text, groups.normal, 3, nil, 'review')
     else line({ { tostring(text), groups.normal } }, 2) end
   end
-  if data.target then required_line('Target: ' .. data.target, groups.muted, 3, nil, 'facts') end
+  if data.target then required_line('Target: ' .. data.target, groups.normal, 3, nil, 'facts') end
   if show_details then
     line({ { (data.details.kind or 'action') .. ' · ' .. (data.details.source or 'registered'), groups.muted } }, 0)
     local text = 'Target: ' .. (data.details.target or 'current buffer')
-    if review then required_line(text, groups.muted, 3, nil, 'review')
-    else line({ { text, groups.muted } }, 0) end
+    if review then required_line(text, groups.normal, 3, nil, 'review')
+    else line({ { text, groups.normal } }, 0) end
   end
   if data.details and (reason or show_details) and not repeated_reason then
     local text = reason and 'Unavailable: ' .. reason or data.details.description
       or ((data.details.kind or 'action') .. ' · ' .. (data.details.target or data.details.id or ''))
-    line({ { text, reason and groups.warning or groups.muted } }, reason and 5 or 0)
+    line({ { text, reason and groups.warning or groups.normal } }, reason and 5 or 0)
   end
   if information.status and data.status then line({ { data.status, groups.muted } }, 0) end
   if data.message then line({ { data.message, groups.warning } }, 5) end
   if data.error then line({ { data.error, groups.error } }, 5) end
-  if information.help and data.help then line({ { data.help, groups.muted } }, 0) end
+  if information.help and data.help then
+    local rows = require('command_tree.view.panels').help_rows(V, data, width, groups)
+    if rows then for _, chunks in ipairs(rows) do line(chunks, 0) end
+    else line({ { data.help, groups.normal } }, 0) end
+  end
   if pages > 1 and (information.status or review) then
     line({ { ('↑/↓ · %d/%d'):format(data.page, pages), groups.muted } }, review and 3 or 0)
   end

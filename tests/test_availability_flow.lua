@@ -66,6 +66,9 @@ no_execution('unsupported configure route')
 attached = { { id = 51, name = 'test-server', supports_method = function() return true end } }
 keys('r')
 H.eq('ready', session.active.availability_report.code, 'Recheck observes newly attached capability')
+H.eq(nil, session.active.availability_report.reason, 'Recheck clears the unavailable reason when the capability becomes ready')
+H.ok(rendered():find('Available in the captured source', 1, true), 'real ready status renders affirmative availability')
+H.ok(not rendered():find('Availability inspection failed', 1, true), 'real ready status never renders a failure reason')
 H.eq('availability', session.active.mode, 'Recheck keeps status open')
 no_execution('recheck after attachment')
 keys('<CR>')
@@ -121,6 +124,30 @@ H.eq('backends', frame.data.section, 'backend repair uses declared Backends sect
 H.eq('file.find', frame.data.backend_recovery.command_id, 'existing bounded receipt retains semantic command')
 H.eq(profile_before, CE.profile(), 'opening repair changes no setting')
 no_execution('configure from status')
+CE.close()
+for _, item in ipairs({
+  { 'file.find', 'File search' }, { 'search.project_text', 'Project text search' }, { 'ui.theme', 'Theme selection' },
+}) do
+  CE.register({ id = item[1], name = item[2], replace = true, available = true,
+    run = function() invoked = invoked + 1 end })
+end
+local health, messages = {}, {}
+for _, name in ipairs({ 'start', 'ok', 'info', 'warn', 'error' }) do
+  health[name] = vim.health[name]
+  vim.health[name] = function(message) messages[#messages + 1] = message end
+end
+local checked, health_error = pcall(require('re35.health').check)
+for name, callback in pairs(health) do vim.health[name] = callback end
+H.ok(checked, 'canonical health inspection succeeds: ' .. tostring(health_error))
+for _, name in ipairs({ 'File search', 'Project text search', 'Theme selection' }) do
+  local found
+  for _, message in ipairs(messages) do
+    if message:find(name .. ' · Available:', 1, true) then found = message; break end
+  end
+  H.ok(found, 'health reports available ' .. name)
+  H.ok(not found:find('Availability inspection failed', 1, true), 'health does not attach a failure to available ' .. name)
+end
+no_execution('canonical health inspection')
 CE.close(); CE.disable()
 vim.lsp.get_clients, Session.new = get_clients, new
 print('Availability flow checks: ' .. H.checks)

@@ -250,7 +250,10 @@ function M.attach(self)
     end
     local scene = ({ search = 'search', words = 'search', selector = 'tree', input = 'input', review = 'review' })[state.mode] or 'tree'
     opts = require('command_tree.presentation').options(self.options, state, scene, opts)
-    if data.details or data.diagnostic then data.help = data.help .. '  ·  Shift-PgUp/PgDn Details' end
+    if data.details or data.diagnostic then data.help = data.help .. '  ·  '
+      .. Guide.hint_pair(self.options.keys.details_up or '<S-PageUp>', self.options.keys.details_down or '<S-PageDown>')
+      .. ' Scroll details' end
+    data.hints = Guide.help_hints(data.help)
     state.page, state.pages = V.draw(state.view, data, opts)
     if state.mode == 'feedback' and not (state.view.details and state.view.details.win and vim.api.nvim_win_is_valid(state.view.details.win)) then
       -- Dynamic opt-out and very small screens still expose the complete bounded

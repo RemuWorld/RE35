@@ -3,7 +3,7 @@ if vim.fn.has("nvim-0.11") ~= 1 then
 end
 local K = require("command_tree.keys")
 local Entry, Profile = require("command_tree.entry"), require("command_tree.profile")
-local M = { version = "0.2.0" }
+local M = { version = "0.2.1" }
 local Lifecycle = require("command_tree.environment.lifecycle")
 local Builder, Options = require("command_tree.environment.builder"), require("command_tree.environment.options")
 local lifecycle = Lifecycle.new(M)

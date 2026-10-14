@@ -2,6 +2,60 @@
 -- these local panels do not add a new portable presentation contract.
 local M = {}
 local ns = vim.api.nvim_create_namespace('CommandTreeDetails')
+local Guide = require('command_tree.session.key_guide')
+
+local function role_group(role, groups)
+  return groups and groups[role] or ({ normal = 'CommandTreeDesc', accent = 'CommandTreeKey',
+    muted = 'CommandTreeMuted', warning = 'CommandTreeWarning', error = 'CommandTreeError' })[role]
+    or 'CommandTreeDesc'
+end
+
+-- Each key + label is one wrap unit. Related controls occupy distinct rows;
+-- a narrow viewport shortens labels before it yields a complete key chord.
+function M.help_rows(V, data, width, groups)
+  local hints = data.hints or Guide.help_hints(data.help)
+  if type(hints) ~= 'table' then return nil end
+  width = math.max(1, width)
+  local ordered, buckets = {}, {}
+  for index, hint in ipairs(hints) do
+    if index > 32 then break end
+    if type(hint) == 'table' and type(hint.key) == 'string' and type(hint.label) == 'string' then
+      local category = hint.group or 'actions'
+      if not buckets[category] then buckets[category] = {}; ordered[#ordered + 1] = category end
+      buckets[category][#buckets[category] + 1] = hint
+    end
+  end
+  local rows = {}
+  for _, category in ipairs(ordered) do
+    local chunks, occupied = {}, 0
+    local function emit()
+      if #chunks > 0 then rows[#rows + 1] = chunks end
+      chunks, occupied = {}, 0
+    end
+    for _, hint in ipairs(buckets[category]) do
+      local key = Guide.hint_key(vim.fn.strcharpart(hint.key:gsub('[\r\n\t%z]', ' '), 0, 128))
+      local label = vim.fn.strcharpart(hint.label:gsub('[\r\n\t%z]', ' '), 0, 256)
+      local size = V.width(key .. ' ' .. label)
+      local separator = #chunks > 0 and ' · ' or ''
+      if occupied + V.width(separator) + size > width then emit(); separator = '' end
+      if size > width then
+        local compact = key:gsub('Shift+', 'S+'):gsub('Ctrl+', 'C+'):gsub('Alt+', 'A+')
+          :gsub('PgUp/Down', 'PgUp/Dn')
+        if V.width(key) > width and V.width(compact) <= width then key = compact end
+        -- Never split an impossible chord into misleading fragments on two
+        -- lines. At this size even its compact spelling cannot be shown.
+        if V.width(key) > width then key = V.clip('…', width) end
+        label = V.clip(label, math.max(0, width - V.width(key) - 1))
+      end
+      if separator ~= '' then chunks[#chunks + 1] = { separator, role_group('muted', groups) } end
+      chunks[#chunks + 1] = { key, role_group('accent', groups) }
+      if label ~= '' then chunks[#chunks + 1] = { ' ' .. label, role_group('normal', groups) } end
+      occupied = occupied + V.width(separator .. key .. (label ~= '' and ' ' .. label or ''))
+    end
+    emit()
+  end
+  return #rows > 0 and rows or nil
+end
 
 function M.critical_options(data, opts)
   if opts.layout ~= 'fixed' or opts.presentation then return opts end
@@ -63,12 +117,16 @@ local function entries(data, opts)
     if details.reason and details.reason ~= data.message then add('Unavailable: ' .. details.reason, 'warning') end
     if info.details then
       add((details.kind or 'action') .. ' · ' .. (details.source or 'registered'))
-      add('Target: ' .. (details.target or 'current buffer'))
-      add(details.description)
+      add('Target: ' .. (details.target or 'current buffer'), 'normal')
+      add(details.description, 'normal')
     end
   end
   if info.status then add(data.status) end
-  if info.help then add(data.help) end
+  if info.help then
+    local hints = data.hints or Guide.help_hints(data.help)
+    if hints then output[#output + 1] = { hints = hints }
+    else add(data.help, 'normal') end
+  end
   return output
 end
 
@@ -141,7 +199,14 @@ function M.prepare(V, view, data, opts)
   end
   local split = vim.tbl_extend('force', {}, data)
   split._panel_entries = entries(data, opts)
-  split.message, split.error, split.status, split.help, split.diagnostic = nil, nil, nil, nil, nil
+  local show_help = model and model.information.help or not model and density == 'full'
+  if show_help and type(opts._details_hint) == 'table' then split._panel_scroll_hint = opts._details_hint end
+  for _, record in ipairs(split._panel_entries) do
+    for _, hint in ipairs(record.hints or {}) do
+      if hint.label == 'Scroll details' then split._panel_scroll_hint = hint end
+    end
+  end
+  split.message, split.error, split.status, split.help, split.hints, split.diagnostic = nil, nil, nil, nil, nil, nil
   if review and data.details and data.details.target then
     -- Target identity is part of the reviewed operation, not optional chrome.
     split.details = { target = data.details.target, kind = data.details.kind, source = data.details.source }
@@ -159,22 +224,33 @@ end
 local function wrap(V, records, width, groups)
   local lines, roles, truncated = {}, {}, false
   for record_index, record in ipairs(records) do
-    local current, chars = '', record.text
-    local group = groups and groups[record.role] or 'CommandTree' .. (record.role == 'error' and 'Warning'
-      or record.role == 'warning' and 'Warning' or 'Muted')
-    local function emit()
-      lines[#lines + 1], roles[#roles + 1] = current, group
-      current = ''
-    end
-    for char in chars:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-      if #lines >= 512 then truncated = true; break end
-      if V.width(current .. char) > width then
-        if current ~= '' then emit() end
-        if V.width(char) > width then char = V.clip(char, width) end
+    if record.hints then
+      for _, chunks in ipairs(M.help_rows(V, { hints = record.hints }, width, groups) or {}) do
+        if #lines >= 512 then truncated = true; break end
+        local text, spans = '', {}
+        for _, chunk in ipairs(chunks) do
+          spans[#spans + 1] = { #text, #text + #chunk[1], chunk[2] }
+          text = text .. chunk[1]
+        end
+        lines[#lines + 1], roles[#roles + 1] = text, spans
       end
-      current = current .. char
+    else
+      local current, chars = '', record.text
+      local group = role_group(record.role, groups)
+      local function emit()
+        lines[#lines + 1], roles[#roles + 1] = current, group
+        current = ''
+      end
+      for char in chars:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+        if #lines >= 512 then truncated = true; break end
+        if V.width(current .. char) > width then
+          if current ~= '' then emit() end
+          if V.width(char) > width then char = V.clip(char, width) end
+        end
+        current = current .. char
+      end
+      if #lines < 512 then emit() elseif current ~= '' then truncated = true end
     end
-    if #lines < 512 then emit() elseif current ~= '' then truncated = true end
     if #lines >= 512 then
       truncated = truncated or record_index < #records
       break
@@ -185,11 +261,27 @@ end
 
 local function render(V, detail)
   local lines, marks = {}, {}
-  local bottom = math.min(detail.total, detail.top + detail.visible - 1)
+  local bottom = math.min(detail.total, detail.top + detail.content_visible - 1)
   for index = detail.top, bottom do
     local value = detail.lines[index]
     lines[#lines + 1] = string.rep(' ', detail.padding) .. value .. string.rep(' ', detail.padding)
-    if #value > 0 then marks[#marks + 1] = { #lines - 1, detail.padding, detail.padding + #value, detail.roles[index] } end
+    if #value > 0 then
+      if type(detail.roles[index]) == 'table' then
+        for _, span in ipairs(detail.roles[index]) do
+          if span[2] > span[1] then marks[#marks + 1] = {
+            #lines - 1, detail.padding + span[1], detail.padding + span[2], span[3] } end
+        end
+      else marks[#marks + 1] = { #lines - 1, detail.padding, detail.padding + #value, detail.roles[index] } end
+    end
+  end
+  if detail.pinned then
+    local text = ''
+    for _, chunk in ipairs(detail.pinned) do
+      local start = #text
+      text = text .. chunk[1]
+      if #chunk[1] > 0 then marks[#marks + 1] = { #lines, detail.padding + start, detail.padding + #text, chunk[2] } end
+    end
+    lines[#lines + 1] = string.rep(' ', detail.padding) .. text .. string.rep(' ', detail.padding)
   end
   while #lines < detail.visible do lines[#lines + 1] = '' end
   local config = vim.deepcopy(detail.config)
@@ -231,7 +323,13 @@ function M.draw(V, view, data, opts, groups)
   if identity ~= detail.identity then detail.top = 1 end
   detail.identity, detail.lines, detail.roles, detail.total = identity, lines, roles, #lines
   detail.visible = math.min(fixed.detail_height, math.max(1, #lines))
-  detail.top = math.max(1, math.min(detail.top or 1, math.max(1, detail.total - detail.visible + 1)))
+  detail.pinned = nil
+  if data._panel_scroll_hint and detail.visible >= 2 and detail.total > detail.visible then
+    detail.pinned = (M.help_rows(V, { hints = { data._panel_scroll_hint } },
+      math.max(1, fixed.width - detail.padding * 2), groups) or {})[1]
+  end
+  detail.content_visible = detail.visible - (detail.pinned and 1 or 0)
+  detail.top = math.max(1, math.min(detail.top or 1, math.max(1, detail.total - detail.content_visible + 1)))
   detail.density = fixed.density
   detail.config = { relative = 'editor', row = fixed.detail_row, col = fixed.col,
     width = fixed.width, height = detail.visible,
@@ -256,7 +354,7 @@ function M.scroll(V, view, delta)
   local detail = view and view.details
   if not detail or not detail.win or not vim.api.nvim_win_is_valid(detail.win) then return false end
   if type(delta) ~= 'number' or delta ~= delta then return false end
-  detail.top = math.max(1, math.min(detail.top + math.floor(delta), math.max(1, detail.total - detail.visible + 1)))
+  detail.top = math.max(1, math.min(detail.top + math.floor(delta), math.max(1, detail.total - detail.content_visible + 1)))
   render(V, detail)
   vim.cmd.redraw()
   return true

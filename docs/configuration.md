@@ -18,7 +18,7 @@ separate instances.
 
 ## Navigation, panels and themes
 
-The 0.2.0 Neovim defaults can be adjusted independently:
+The Neovim defaults can be adjusted independently:
 
 ```lua
 require('re35').setup({
@@ -45,6 +45,29 @@ fields keep their editing keys. Set `layout = 'dynamic'` for the previous
 content-sized layout, or `details.enabled = false` to keep inline feedback.
 Small viewports fall back to inline feedback. Required input/review/source
 facts remain visible or the associated effect is refused.
+
+### Text and color roles
+
+Command and group names use the same panel text color; `›` identifies a group.
+Keys and navigation icons share an accent. Descriptions, targets and shortcut
+labels use normal text; provider/type metadata stays secondary. Unavailable
+items are muted, warnings use `DiagnosticWarn`, and errors use `DiagnosticError`.
+Colors do not replace the written availability or error message.
+
+RE35 follows the active colorscheme and preserves explicit highlight overrides:
+
+```lua
+vim.api.nvim_set_hl(0, 'CommandTreeKey', { link = 'Special' })
+vim.api.nvim_set_hl(0, 'CommandTreeMuted', { link = 'NormalFloat' })
+```
+
+Apply overrides after loading a theme, or reapply them from a `ColorScheme`
+autocommand. Named presentation presets can override their normal, accent,
+muted, selected, warning and error roles independently.
+
+Shortcut hints wrap between complete key/description pairs. Details scrolling
+is shown separately from command navigation; the key bindings themselves are
+unchanged.
 
 The default builtin theme adapter saves confirmed selections to
 `vim.fn.stdpath('state') .. '/re35/theme.json'` and restores them at startup.

@@ -297,6 +297,7 @@
     "tests/test_search_provider_host.lua",
     "tests/test_session_dispatch.lua",
     "tests/test_settings_lifecycle.lua",
+    "tests/test_shortcut_hints.lua",
     "tests/test_task_report.lua",
     "tests/test_theme_persistence.lua",
     "tests/test_theme_startup.lua",
@@ -304,6 +305,7 @@
     "tests/test_ui_import.lua",
     "tests/test_ui_reset.lua",
     "tests/test_v52_flow.lua",
+    "tests/test_view_highlights.lua",
     "tests/test_view_layout.lua",
     "tests/test_workflow_contract.lua",
     "tools/prepare_source.py"

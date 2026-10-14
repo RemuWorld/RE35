@@ -133,7 +133,13 @@ local function report_impl(command, ctx, registry, options)
     vim.api.nvim_buf_get_changedtick(ctx.buf)
   local checked, enabled, reason = pcall(registry.available, registry, command.id, ctx)
   report.available = checked and enabled == true
-  report.reason = report.available and nil or text(checked and reason or 'Availability inspection failed')
+  if report.available then
+    report.reason = nil
+  elseif checked then
+    report.reason = text(reason)
+  else
+    report.reason = text('Availability inspection failed: ' .. text(enabled))
+  end
   report.code = report.available and 'ready' or 'unavailable'
   add(report, 'Command: ' .. command.id)
   add(report, 'Filetype: ' .. (vim.bo[ctx.buf].filetype ~= '' and vim.bo[ctx.buf].filetype or '(not set)'))

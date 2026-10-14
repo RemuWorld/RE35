@@ -563,6 +563,9 @@ function Manager:draw(session, opts)
     or frame.id == 'settings' and frame.data.review and 'review' or 'tree'
   prepared.window = require('command_tree.presentation').options(opts, session, scene,
     vim.tbl_extend("force", {}, opts.window or {}, { density = prepared.density }))
+  local keys, Guide = opts.keys or {}, require('command_tree.session.key_guide')
+  prepared.window._details_hint = { key = Guide.hint_pair(keys.details_up or '<S-PageUp>', keys.details_down or '<S-PageDown>'),
+    label = 'Scroll details', group = 'information' }
   prepared.presentation = prepared.window.presentation
   local drawn = false
   if frame.definition.draw then

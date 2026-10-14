@@ -6,8 +6,9 @@ local presentation_slots = {}
 
 function M.highlights()
   for name, target in pairs({ Normal = "NormalFloat", Title = "Title",
-    Key = "Function", Group = "Keyword", Desc = "NormalFloat", Muted = "Comment",
-    Disabled = "Comment", Warning = "DiagnosticWarn", Icon = "Special", Selected = "PmenuSel" }) do
+    Key = "Function", Group = "CommandTreeDesc", Desc = "NormalFloat", Muted = "Comment",
+    Disabled = "Comment", Warning = "DiagnosticWarn", Error = "DiagnosticError",
+    Icon = "CommandTreeKey", Selected = "PmenuSel" }) do
     vim.api.nvim_set_hl(0, "CommandTree" .. name, { link = target, default = true })
   end
   -- Some colorschemes link FloatBorder to a reversed separator. Keep the
@@ -119,7 +120,7 @@ local function presentation_roles(view, model, accent)
   end
   if not view.presentation_slot then return nil end
   local defaults = { normal = 'CommandTreeNormal', selected = 'CommandTreeSelected', muted = 'CommandTreeMuted',
-    accent = 'CommandTreeKey', warning = 'CommandTreeWarning', error = 'DiagnosticError' }
+    accent = 'CommandTreeKey', warning = 'CommandTreeWarning', error = 'CommandTreeError' }
   local groups = {}
   for role, target in pairs(defaults) do
     local name = 'RE35Presentation' .. view.presentation_slot .. role
@@ -150,7 +151,7 @@ local function draw(view, data, opts)
     local groups = presentation_roles(view, opts.presentation, opts.accent)
     if not groups then
       groups = { normal = 'CommandTreeNormal', selected = 'CommandTreeSelected', muted = 'CommandTreeMuted',
-        accent = 'CommandTreeKey', warning = 'CommandTreeWarning', error = 'DiagnosticError' }
+        accent = 'CommandTreeKey', warning = 'CommandTreeWarning', error = 'CommandTreeError' }
       opts = vim.tbl_extend('force', {}, opts)
       opts.presentation_report = vim.deepcopy(opts.presentation_report or { fallbacks = {} })
       opts.presentation_report.fallbacks[#opts.presentation_report.fallbacks + 1] = {
@@ -343,19 +344,28 @@ local function draw(view, data, opts)
       local detail = data.details
       if density == "full" then
         line({ { "  " .. (detail.kind or "action") .. " · " .. (detail.source or "registered"), "CommandTreeMuted" } }, 0)
-        line({ { "  Target: " .. (detail.target or "current buffer"), "CommandTreeMuted" } }, 0)
+        line({ { "  Target: " .. (detail.target or "current buffer"), "CommandTreeDesc" } }, 0)
       end
       local text = detail.reason and ((density == "full" and "Unavailable: " or "") .. detail.reason) or detail.description
         or ((detail.kind or "action") .. " · " .. (detail.target or detail.id or ""))
       if not repeated_reason then
-        line({ { ((density == "minimal" or width < 5) and "" or "  ") .. text, detail.reason and "CommandTreeWarning" or "CommandTreeMuted" } }, 0)
+        line({ { ((density == "minimal" or width < 5) and "" or "  ") .. text, detail.reason and "CommandTreeWarning" or "CommandTreeDesc" } }, 0)
       end
     end
     if data.status and density == "full" then line({ { "  " .. data.status, "CommandTreeMuted" } }, 0) end
     if data.message or data.error or data.help and density == "full" then
       if density == "full" then line({ { "", "CommandTreeMuted" } }, 0) end
-      line({ { ((density == "minimal" or width < 5) and "" or "  ") .. (data.message or data.error or data.help),
-        (data.message or data.error) and "CommandTreeWarning" or "CommandTreeMuted" } }, (data.message or data.error) and 5 or 0)
+      local hint_rows = not data.message and not data.error and Panels.help_rows(M, data, math.max(1, width - 2))
+      if hint_rows then
+        for _, chunks in ipairs(hint_rows) do
+          table.insert(chunks, 1, { width < 5 and "" or "  ", "CommandTreeDesc" })
+          line(chunks, 0)
+        end
+      else
+        line({ { ((density == "minimal" or width < 5) and "" or "  ") .. (data.error or data.message or data.help),
+          data.error and "CommandTreeError" or data.message and "CommandTreeWarning" or "CommandTreeDesc" } },
+          (data.message or data.error) and 5 or 0)
+      end
     end
     if pages > 1 and density == "full" then
       local paging = range_first and ("  ↑/↓  ·  %d–%d of %d"):format(range_first, range_last, #data.items)
