@@ -68,6 +68,78 @@ for _, preset in ipairs({ false, true }) do
   end
 end
 
+-- Each dense page reserves selectable rows and actual chrome, not unexplained
+-- bottom padding. A short last page keeps the same capacity and anchor.
+local choices = {}
+for index = 1, 13 do choices[index] = { key = tostring(index), name = 'Choice ' .. index } end
+for _, preset in ipairs({ false, true }) do
+  for _, density in ipairs({ 'compact', 'minimal' }) do
+    local opts, slots = options(density, preset), density == 'compact' and 6 or 3
+    local data = { path = '\\', selected = 1, items = choices }
+    V.draw(view, data, opts)
+    local initial = footprint(view)
+    H.eq(slots + 1, initial.height, density .. ' reserves only its path and configured list slots')
+    H.eq(1, view.visible_first, density .. ' first page starts at its first choice')
+    H.eq(slots, view.visible_last, density .. ' all configured slots remain selectable')
+    for _, row in ipairs(lines(view)) do H.ok(row:find('%S'), density .. ' full page has no unused bottom rows') end
+    data.selected, data.path = 13, '\\ f nested branch'
+    data.message, data.help = 'An error', 'Esc Back · Enter Open'
+    V.draw(view, data, opts)
+    H.eq(initial, footprint(view), density .. ' last page, path and feedback preserve the footprint')
+    H.eq(13, view.visible_last, density .. ' final choice remains visible')
+    V.close(view)
+
+    data = { path = '\\ /', query = 'Choice', selected = 1, items = choices }
+    V.draw(view, data, opts)
+    H.eq(slots + 2, footprint(view).height, density .. ' search reserves its actual query row')
+    H.eq(slots, view.visible_last, density .. ' search keeps its configured choice capacity')
+    for _, row in ipairs(lines(view)) do H.ok(row:find('%S'), density .. ' search full page has no unused bottom rows') end
+    V.close(view)
+
+    -- Required input/source scenes keep their complete max-height budget.
+    data.input, data.label = true, 'Choose the required target'
+    V.draw(view, data, opts)
+    H.eq(16, footprint(view).height, density .. ' input retains the larger reading budget')
+    V.close(view)
+    data.input, data.label, data.target = nil, nil, 'src/main.cpp'
+    V.draw(view, data, opts)
+    H.eq(16, footprint(view).height, density .. ' source identity retains the larger reading budget')
+    V.close(view)
+  end
+end
+
+-- Explicit rows, custom chrome and spacing each account for actual body rows.
+for _, density in ipairs({ 'compact', 'minimal' }) do
+  local opts = options(density, false)
+  if density == 'compact' then opts.compact_rows = 4 else opts.minimal_rows = 2 end
+  local slots = density == 'compact' and 4 or 2
+  V.draw(view, { path = '\\', selected = 1, items = choices }, opts)
+  H.eq(slots + 1, footprint(view).height, density .. ' honors local custom rows')
+  H.eq(slots, view.visible_last, density .. ' renders every local custom slot')
+  V.close(view)
+
+  opts = options(density, true)
+  opts.presentation.layout.rows = slots
+  opts.presentation.spacing.vertical = 1
+  opts.presentation.decoration.border = 'none'
+  opts.presentation.decoration.separator = true
+  opts.presentation.information.title = true
+  opts.presentation.information.status = true
+  V.draw(view, { path = '\\', selected = 1, items = choices }, opts)
+  -- Title, path, separator, page footer and explicit top/bottom padding.
+  H.eq(slots + 6, footprint(view).height, density .. ' custom presentation reserves exactly its chrome and padding')
+  H.eq(slots, view.visible_last, density .. ' custom presentation keeps its requested slots')
+  audit(view, density .. ' custom dense page')
+  V.close(view)
+
+  opts.presentation.layout.max_height = 6
+  V.draw(view, { path = '\\', selected = 13, items = choices }, opts)
+  H.eq(6, footprint(view).height, density .. ' custom ceiling bounds chrome plus rows')
+  H.ok(view.visible_first and view.visible_last == 13, density .. ' custom ceiling preserves the selected choice')
+  audit(view, density .. ' ceiling-limited page')
+  V.close(view)
+end
+
 -- Preserve the intentionally short Minimal entry strip and horizontal margins.
 local minimal = options('minimal', false)
 V.draw(view, { path = '\\', items = {} }, minimal)

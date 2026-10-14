@@ -270,6 +270,13 @@ local function rendered_report()
   if frame.view.details and vim.api.nvim_buf_is_valid(frame.view.details.buf) then
     vim.list_extend(lines, vim.api.nvim_buf_get_lines(frame.view.details.buf, 0, -1, false))
   end
+  if frame.view.guide and vim.api.nvim_buf_is_valid(frame.view.guide.buf) then
+    for _, line in ipairs(vim.api.nvim_buf_get_lines(frame.view.guide.buf, 0, -1, false)) do
+      -- Guide columns align keys visually; the key/label association is the
+      -- same whether controls are beside or below the report preview.
+      lines[#lines + 1] = line:gsub('%s+', ' ')
+    end
+  end
   return table.concat(lines, '\n')
 end
 for _, density in ipairs({ 'full', 'compact', 'minimal' }) do

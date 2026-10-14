@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.2
+
+- Distinguish branches with a persistent marker and emphasis, and highlight the
+  complete selected row in all three densities.
+- Show grouped shortcuts to the right in Full when spare viewport space fits
+  every control; retain below-panel guidance when it does not.
+- Move explicitly classified save confirmations into the title with neutral
+  styling. Keep storage failures, warnings and diagnostics inspectable below.
+- Remove unused Compact/Minimal navigation rows while preserving fixed main
+  geometry, required review facts, custom spacing and theme overrides.
+
 ## 0.2.1
 
 - Fix availability diagnostics showing a failure reason for ready commands.

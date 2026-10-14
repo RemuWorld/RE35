@@ -3,14 +3,38 @@ local ns = vim.api.nvim_create_namespace("CommandTreeUI")
 -- Reuse a bounded pool of host-owned groups instead of creating new global
 -- highlight names for each exported preset or each popup reopening.
 local presentation_slots = {}
+local derived_defaults = {}
+
+-- Refresh only groups still owned by RE35. Materialized attributes must follow
+-- ColorScheme changes, while explicit user links, colors and styles survive.
+local function derived_default(name, attributes, legacy_link)
+  local current = vim.api.nvim_get_hl(0, { name = name, link = true })
+  if next(current) == nil or vim.deep_equal(current, derived_defaults[name])
+    or legacy_link and vim.deep_equal(current, { link = legacy_link }) then
+    vim.api.nvim_set_hl(0, name, attributes)
+    derived_defaults[name] = vim.api.nvim_get_hl(0, { name = name, link = true })
+  end
+end
+
+local function branch_attributes(normal, branch)
+  local attributes = vim.api.nvim_get_hl(0, { name = normal, link = false })
+  local style = vim.api.nvim_get_hl(0, { name = branch, link = false })
+  for _, key in ipairs({ 'bold', 'italic', 'underline', 'undercurl', 'underdouble',
+    'underdotted', 'underdashed', 'strikethrough' }) do attributes[key] = style[key] or false end
+  return attributes
+end
 
 function M.highlights()
   for name, target in pairs({ Normal = "NormalFloat", Title = "Title",
-    Key = "Function", Group = "CommandTreeDesc", Desc = "NormalFloat", Muted = "Comment",
+    Key = "Function", Desc = "NormalFloat", Muted = "Comment",
     Disabled = "Comment", Warning = "DiagnosticWarn", Error = "DiagnosticError",
     Icon = "CommandTreeKey", Selected = "PmenuSel" }) do
     vim.api.nvim_set_hl(0, "CommandTree" .. name, { link = target, default = true })
   end
+  local group = vim.api.nvim_get_hl(0, { name = "CommandTreeDesc", link = false })
+  group.bold = true
+  derived_default("CommandTreeGroup", group, "CommandTreeDesc")
+  derived_default("CommandTreeSelectedGroup", branch_attributes("CommandTreeSelected", "CommandTreeGroup"))
   -- Some colorschemes link FloatBorder to a reversed separator. Keep the
   -- theme's foreground, but give the border the same background as the panel.
   local border = vim.api.nvim_get_hl(0, { name = "FloatBorder", link = false })
@@ -22,6 +46,21 @@ function M.highlights()
 end
 
 function M.width(text) return vim.fn.strdisplaywidth(text) end
+
+function M.item_role(item, selected, groups)
+  groups = groups or { normal = "CommandTreeDesc", muted = "CommandTreeDisabled",
+    branch = "CommandTreeGroup", selected = "CommandTreeSelected", selected_branch = "CommandTreeSelectedGroup" }
+  if selected then return item.group and not item.disabled and groups.selected_branch or groups.selected end
+  return item.disabled and groups.muted or item.group and groups.branch or groups.normal
+end
+
+-- A leading branch marker survives long labels and disabled/selected states.
+-- At impossible widths, command identity has priority over the marker.
+function M.item_name(item, width)
+  local marker = item.group and "▸ " or ""
+  if M.width(marker) + 1 > width then marker = "" end
+  return marker .. M.clip(item.name or "", math.max(0, width - M.width(marker)))
+end
 
 function M.clip(text, width)
   text = tostring(text):gsub("[\r\n\t]", " ")
@@ -58,12 +97,14 @@ end
 
 function M.close(view)
   if not view then return true end
-  local detail_failure
-  if view.details then
-    local details = view.details
-    view.details = nil
-    local ok, reason = M.close(details)
-    if not ok then view.details, detail_failure = details, reason end
+  local panel_failures = {}
+  for _, name in ipairs({ 'details', 'guide' }) do
+    local panel = view[name]
+    if panel then
+      view[name] = nil
+      local ok, reason = M.close(panel)
+      if not ok then view[name], panel_failures[#panel_failures + 1] = panel, reason end
+    end
   end
   local win, buf = view.win, view.buf
   -- WinClosed/BufWipeout observers must see the UI as detached while Neovim
@@ -80,8 +121,8 @@ function M.close(view)
   close(buf, vim.api.nvim_buf_is_valid, function(value) vim.api.nvim_buf_delete(value, { force = true }) end)
   view.win = win and vim.api.nvim_win_is_valid(win) and win or nil
   view.buf = buf and vim.api.nvim_buf_is_valid(buf) and buf or nil
-  if detail_failure then failures[#failures + 1] = detail_failure end
-  if view.win or view.buf or view.details then return false, table.concat(failures, "; ") end
+  for _, reason in ipairs(panel_failures) do failures[#failures + 1] = reason end
+  if view.win or view.buf or view.details or view.guide then return false, table.concat(failures, "; ") end
   if view.presentation_slot then presentation_slots[view.presentation_slot], view.presentation_slot = nil, nil end
   return true
 end
@@ -133,6 +174,15 @@ local function presentation_roles(view, model, accent)
     else vim.api.nvim_set_hl(0, name, { link = target }) end
     groups[role] = name
   end
+  for role, base in pairs({ branch = 'normal', selected_branch = 'selected' }) do
+    local name = 'RE35Presentation' .. view.presentation_slot .. role
+    local target = role == 'branch' and 'CommandTreeGroup' or 'CommandTreeSelectedGroup'
+    local colors = model.roles[base] or {}
+    if colors.fg or colors.bg then
+      vim.api.nvim_set_hl(0, name, branch_attributes(groups[base], 'CommandTreeGroup'))
+    else vim.api.nvim_set_hl(0, name, { link = target }) end
+    groups[role] = name
+  end
   return groups
 end
 
@@ -146,20 +196,25 @@ end
 local function draw(view, data, opts)
   opts = opts or {}
   local Panels = require('command_tree.view.panels')
+  data = require('command_tree.view.status').prepare(M, data, opts)
+  local source_data = data
   data, opts = Panels.prepare(M, view, data, opts)
   if opts.presentation then
     local groups = presentation_roles(view, opts.presentation, opts.accent)
     if not groups then
       groups = { normal = 'CommandTreeNormal', selected = 'CommandTreeSelected', muted = 'CommandTreeMuted',
-        accent = 'CommandTreeKey', warning = 'CommandTreeWarning', error = 'CommandTreeError' }
+        accent = 'CommandTreeKey', warning = 'CommandTreeWarning', error = 'CommandTreeError',
+        branch = 'CommandTreeGroup', selected_branch = 'CommandTreeSelectedGroup' }
       opts = vim.tbl_extend('force', {}, opts)
       opts.presentation_report = vim.deepcopy(opts.presentation_report or { fallbacks = {} })
       opts.presentation_report.fallbacks[#opts.presentation_report.fallbacks + 1] = {
         path = 'roles', requested = opts.presentation.roles, effective = {},
         reason = 'Concurrent presentation highlight slots exhausted; host theme roles are used' }
     end
+    data = require('command_tree.view.guide').prepare(M, view, data, opts, source_data, groups)
     return require('command_tree.view.presentation').draw(M, view, data, opts, groups)
   end
+  data = require('command_tree.view.guide').prepare(M, view, data, opts, source_data)
   view.presentation_report, view.presentation_review_complete, view.presentation_review_reason = nil, nil, nil
   view.presentation_input_complete, view.presentation_input_reason = nil, nil
   view.presentation_facts_complete, view.presentation_facts_reason = nil, nil
@@ -180,6 +235,7 @@ local function draw(view, data, opts)
   -- A target panel belongs inside its source window, including its border.
   -- Very small sources keep a borderless body instead of covering neighbors.
   if target and (target.width <= border or target.height <= border) then border = 0 end
+  if opts._fixed_panel then border = opts._fixed_panel.border end
   local max_width = math.max(1, target and target.width - border or vim.o.columns - border - 2)
   local window_limit = math.min(max_width, opts.max_width or 72)
   local padding = density == "minimal" and math.min(2, math.max(0, math.floor((window_limit - 4) / 2))) or 0
@@ -213,10 +269,18 @@ local function draw(view, data, opts)
   local max_height = math.max(1, target and target.height - border or vim.o.lines - vim.o.cmdheight - border - 1)
   if opts._fixed_panel then max_height = opts._fixed_panel.height end
   local header_rows = 1 + (data.query ~= nil and 1 or 0) + (density == "full" and 1 or 0)
-  local feedback_rows = (data.message and 1 or 0) + (density == "full" and (data.status and 1 or 0) + (data.help and 2 or 0) or 0)
-  local available = math.max(1, target and max_height - header_rows - detail_rows - content_rows - feedback_rows
-    or vim.o.lines - vim.o.cmdheight - (data.query ~= nil and 10 or 9) - detail_rows - content_rows)
+  local help_rows = density == "full" and data.help and not data.message and not data.error
+    and Panels.help_rows(M, data, math.max(1, width - 2)) or nil
+  local feedback_rows = (data.message or data.error or density == "full" and data.help) and
+    ((density == "full" and 1 or 0) + (help_rows and #help_rows or 1)) or 0
+  feedback_rows = feedback_rows + (density == "full" and data.status and 1 or 0)
+  local available = math.max(1, max_height - header_rows - detail_rows - content_rows - feedback_rows)
   local page_size = math.max(1, math.min(opts.max_height or 16, available))
+  if density == "full" and #data.items > page_size then
+    -- Full alone shows a paging footer in the body. Compact places it in the
+    -- border title and Minimal keeps it out of the reading strip.
+    page_size = math.max(1, math.min(page_size, available - 1))
+  end
   local pages, range_first, range_last = 1
   local lines, marks, priorities, item_indices = {}, {}, {}, {}
   local function line(chunks, priority, item_index)
@@ -241,11 +305,10 @@ local function draw(view, data, opts)
     local key_limit = math.min(8, math.max(0, remaining - math.min(8, remaining) - 1))
     local key = key_limit > 0 and M.clip(item.current and "↵" or K.label(item.key or ""), key_limit) or ""
     local key_text = key ~= "" and key .. " " or ""
-    local name = M.clip((item.name or "") .. (item.group and " ›" or ""),
-      math.max(0, remaining - M.width(key_text)))
+    local name = M.item_name(item, math.max(0, remaining - M.width(key_text)))
     local highlight = selected and "CommandTreeSelected" or nil
     line({ { prefix .. key_text, highlight or "CommandTreeKey" },
-      { name, highlight or (item.disabled and "CommandTreeDisabled" or item.group and "CommandTreeGroup" or "CommandTreeDesc") } },
+      { name, M.item_role(item, selected) } },
       selected and 2 or 1, index)
   end
   local path = tostring(data.path or "\\")
@@ -279,7 +342,7 @@ local function draw(view, data, opts)
         local label = M.clip(item.current and "↵" or K.label(item.key or ""), key_width)
         local name_width = math.max(1, inside - key_width - 4)
         local name = item.editing_text ~= nil and M.viewport(item.editing_text, item.editing_cursor, name_width)
-          or M.clip((item.name or "") .. (item.group and " ›" or ""), name_width)
+          or M.item_name(item, name_width)
         local highlight = selected and "CommandTreeSelected" or nil
         if item.editing_text ~= nil and width < 10 then
           line({ { M.viewport(item.editing_text, item.editing_cursor, width), highlight or "CommandTreeKey" } }, 2, index)
@@ -287,7 +350,7 @@ local function draw(view, data, opts)
           narrow_item(item, selected, index)
         else
           line({ { "  " .. (selected and "› " or "  ") .. label .. string.rep(" ", key_width - M.width(label)) .. "  ", highlight or "CommandTreeKey" },
-            { name, highlight or (item.disabled and "CommandTreeDisabled" or item.group and "CommandTreeGroup" or "CommandTreeDesc") } },
+            { name, M.item_role(item, selected) } },
             (selected or item.editing_text ~= nil) and 2 or 1, index)
         end
       end
@@ -309,9 +372,9 @@ local function draw(view, data, opts)
       for i = first, last do key_width = math.min(12, math.max(key_width, M.width(K.label(data.items[i].key or "")))) end
       for i = first, last do
         local item = data.items[i]
-        local selected, row_index = data.selected == i, #lines
+        local selected = data.selected == i
         if item.editing_text ~= nil and (density == "minimal" or width < 10) then
-          line({ { M.viewport(item.editing_text, item.editing_cursor, width), "CommandTreeKey" } }, 2, i)
+          line({ { M.viewport(item.editing_text, item.editing_cursor, width), selected and "CommandTreeSelected" or "CommandTreeKey" } }, 2, i)
         elseif item.editing_text == nil and width < 28 then
           narrow_item(item, selected, i)
         else
@@ -323,14 +386,13 @@ local function draw(view, data, opts)
           local budget = math.max(1, width - key_width - M.width(icon) - 9)
           local detail_width = math.min(M.width(detail), math.floor(budget / 2))
           local desc = item.editing_text ~= nil and M.viewport(item.editing_text, item.editing_cursor, math.max(1, budget - detail_width))
-            or M.clip(item.name or "", math.max(1, budget - detail_width))
-          line({ { (selected and "› " or "  ") .. label .. string.rep(" ", key_width - M.width(label)) .. "   ", "CommandTreeKey" },
-            { icon, item.disabled and "CommandTreeDisabled" or "CommandTreeIcon" },
-            { desc, item.disabled and "CommandTreeDisabled" or item.group and "CommandTreeGroup" or "CommandTreeDesc" },
-            { M.clip(detail, detail_width), "CommandTreeMuted" },
-            { item.group and "  ›" or item.disabled and "  ·" or "", "CommandTreeMuted" } }, (selected or item.editing_text ~= nil) and 2 or 1, i)
+            or M.item_name(item, math.max(1, budget - detail_width))
+          line({ { (selected and "› " or "  ") .. label .. string.rep(" ", key_width - M.width(label)) .. "   ", selected and "CommandTreeSelected" or "CommandTreeKey" },
+            { icon, selected and "CommandTreeSelected" or item.disabled and "CommandTreeDisabled" or "CommandTreeIcon" },
+            { desc, M.item_role(item, selected) },
+            { M.clip(detail, detail_width), selected and "CommandTreeSelected" or "CommandTreeMuted" },
+            { item.disabled and "  ·" or "", selected and "CommandTreeSelected" or "CommandTreeMuted" } }, (selected or item.editing_text ~= nil) and 2 or 1, i)
         end
-        if selected then marks[#marks + 1] = { row_index, 0, #lines[#lines], "CommandTreeSelected" } end
       end
     end
     if #data.items == 0 and content_rows == 0 then line({ { (density == "minimal" and "" or "  ") .. (data.empty or "No commands"), "CommandTreeMuted" } }) end
@@ -363,8 +425,8 @@ local function draw(view, data, opts)
         end
       else
         line({ { ((density == "minimal" or width < 5) and "" or "  ") .. (data.error or data.message or data.help),
-          data.error and "CommandTreeError" or data.message and "CommandTreeWarning" or "CommandTreeDesc" } },
-          (data.message or data.error) and 5 or 0)
+          data.error and "CommandTreeError" or data.message and data.message_role ~= 'normal' and "CommandTreeWarning" or "CommandTreeDesc" } },
+          (data.error or data.message and data.message_role ~= 'normal') and 5 or 0)
       end
     end
     if pages > 1 and density == "full" then
@@ -373,7 +435,7 @@ local function draw(view, data, opts)
       line({ { paging, "CommandTreeMuted" } }, 0)
     end
   end
-  local tiny_target = target and max_height <= 2
+  local tiny_target = (target or opts._fixed_panel) and max_height <= 2
   if tiny_target then priorities[1] = 0 end
   -- On short screens, trim guidance and metadata before the input, selected
   -- item or error. Keep extmark rows in step with any removed middle row.
@@ -431,6 +493,7 @@ local function draw(view, data, opts)
     config.title_pos, config.footer, config.footer_pos = "left", "", "right"
   end
   Panels.main(view, lines, config, opts)
+  require('command_tree.view.status').decorate(M, data, config)
   M.window(view, lines, config)
   if view.presentation_slot then presentation_slots[view.presentation_slot], view.presentation_slot = nil, nil end
   if opts.accent then
@@ -440,9 +503,15 @@ local function draw(view, data, opts)
     vim.wo[view.win].winhighlight = "Normal:CommandTreeNormal,FloatBorder:" .. group .. ",FloatTitle:" .. group .. ",EndOfBuffer:CommandTreeNormal"
   end
   vim.api.nvim_buf_clear_namespace(view.buf, ns, 0, -1)
+  for index, item_index in ipairs(item_indices) do
+    if item_index == data.selected then
+      vim.api.nvim_buf_set_extmark(view.buf, ns, index - 1, 0, { end_col = #lines[index],
+        hl_group = "CommandTreeSelected", hl_eol = true, priority = 90 })
+    end
+  end
   for _, mark in ipairs(marks) do
     if mark[1] < #lines and mark[3] > mark[2] then
-      vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
+      vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4], priority = 100 })
     end
   end
   Panels.draw(M, view, data, opts)

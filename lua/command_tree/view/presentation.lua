@@ -18,6 +18,7 @@ local function geometry(V, data, opts)
   local requested_border = model.decoration.border
   local border = requested_border == 'none' and 0 or 2
   if target and (target.width <= border or target.height <= border) then border = 0 end
+  if opts._fixed_panel then border = opts._fixed_panel.border end
   local available_width = math.max(1, target and target.width - border or vim.o.columns - border - 2)
   local window_limit = math.max(1, math.min(available_width, layout.max_width))
   local padding = math.min(model.spacing.horizontal, math.max(0, math.floor((window_limit - 1) / 2)))
@@ -230,11 +231,18 @@ function P.draw(V, view, data, opts, groups)
     data.required_notice or false }) do
     if text then path_rows = path_rows + (wrapped_rows(V, text, width, body_height) or body_height + 1) end
   end
+  local help_rows = information.help and data.help
+    and require('command_tree.view.panels').help_rows(V, data, width, groups) or nil
   local metadata_rows = (show_details and 2 or 0) + (data.details and (reason or show_details) and not repeated_reason and 1 or 0)
-    + (information.status and data.status and 1 or 0) + (information.help and data.help and 1 or 0)
-    + (data.message and 1 or 0) + (model.decoration.separator and 1 or 0)
+    + (information.status and data.status and 1 or 0) + (information.help and data.help and (help_rows and #help_rows or 1) or 0)
+    + (data.message and 1 or 0) + (data.error and 1 or 0) + (model.decoration.separator and 1 or 0)
   local page_size = math.max(1, math.min(layout.rows, layout.max_height,
-    body_height - path_rows - metadata_rows - (#(data.content or {})) - 1))
+    body_height - path_rows - metadata_rows - (#(data.content or {}))))
+  if (information.status or review) and #(data.items or {}) > page_size then
+    -- A paging row is real chrome only for modes that actually display one.
+    page_size = math.max(1, math.min(page_size,
+      body_height - path_rows - metadata_rows - (#(data.content or {})) - 1))
+  end
   if review or data.required_facts and next(data.required_facts) ~= nil then
     view.presentation_review_complete, view.presentation_review_reason, page_size = preflight(V, data, opts, prepared, page_size)
   end
@@ -267,7 +275,7 @@ function P.draw(V, view, data, opts, groups)
     for index = first, last do key_width = math.min(12, math.max(key_width, V.width(K.label(items[index].key or '')))) end
     for index = first, last do
       local item, selected = items[index], data.selected == index
-      local role = selected and groups.selected or item.disabled and groups.muted or groups.normal
+      local role = V.item_role(item, selected, groups)
       if item.editing_text ~= nil then
         local prefix = width < 4 and '' or '> '
         line({ { prefix, role }, { V.viewport(item.editing_text, item.editing_cursor,
@@ -294,7 +302,7 @@ function P.draw(V, view, data, opts, groups)
         local detail_text = detail and '  ' .. detail or ''
         local budget = math.max(0, remaining - V.width(key_text) - V.width(icon))
         local detail_width = math.min(V.width(detail_text), math.floor(budget / 2))
-        local name = V.clip((item.name or '') .. (item.group and ' ›' or ''), math.max(0, budget - detail_width))
+        local name = V.item_name(item, math.max(0, budget - detail_width))
         line({ { prefix .. key_text, selected and role or groups.accent }, { icon .. name, role },
           { V.clip(detail_text, detail_width), selected and role or groups.muted } }, selected and 4 or review and 3 or 1, index)
       end
@@ -320,7 +328,8 @@ function P.draw(V, view, data, opts, groups)
     line({ { text, reason and groups.warning or groups.normal } }, reason and 5 or 0)
   end
   if information.status and data.status then line({ { data.status, groups.muted } }, 0) end
-  if data.message then line({ { data.message, groups.warning } }, 5) end
+  if data.message then line({ { data.message, data.message_role == 'normal' and groups.normal or groups.warning } },
+    data.message_role == 'normal' and 0 or 5) end
   if data.error then line({ { data.error, groups.error } }, 5) end
   if information.help and data.help then
     local rows = require('command_tree.view.panels').help_rows(V, data, width, groups)
@@ -383,13 +392,21 @@ function P.draw(V, view, data, opts, groups)
   end
   local Panels = require('command_tree.view.panels')
   Panels.main(view, lines, config, opts)
+  require('command_tree.view.status').decorate(V, data, config, groups)
   V.window(view, lines, config)
   vim.wo[view.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
     .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal
   vim.api.nvim_buf_clear_namespace(view.buf, ns, 0, -1)
+  for index, item_index in ipairs(indices) do
+    if item_index == data.selected then
+      local row = index - 1 + vertical
+      vim.api.nvim_buf_set_extmark(view.buf, ns, row, 0, { end_col = #lines[row + 1],
+        hl_group = groups.selected, hl_eol = true, priority = 90 })
+    end
+  end
   for _, mark in ipairs(marks) do
     if mark[1] < #lines and mark[3] > mark[2] then
-      vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
+      vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4], priority = 100 })
     end
   end
   Panels.draw(V, view, data, opts, groups)

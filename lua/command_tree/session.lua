@@ -270,7 +270,8 @@ function M.new(services)
         if not ok then state.message = 'View changed for this session; saving failed: ' .. tostring(err) end
         if ok then
           local status = require('re35').persistence_status().profile
-          state.message = status.scope == 'startup' and 'View saved · restored at startup' or 'View changed · this session only'
+          self:set_notice(status.scope == 'startup' and 'View saved · restored at startup' or 'View changed · this session only',
+            status.scope == 'startup' and 'Saved · startup' or 'Session only')
         end
       end
       return
@@ -284,7 +285,8 @@ function M.new(services)
       if not ok then state.message = "View changed for this session; saving failed: " .. tostring(err) end
       if ok then
         local status = require('re35').persistence_status().profile
-        state.message = status.scope == 'startup' and 'View saved · restored at startup' or 'View changed · this session only'
+        self:set_notice(status.scope == 'startup' and 'View saved · restored at startup' or 'View changed · this session only',
+          status.scope == 'startup' and 'Saved · startup' or 'Session only')
       end
     end
   end
@@ -466,6 +468,7 @@ function M.new(services)
           local enabled, err = self.usage:toggle(result.id, persistent)
           state.message = err and ("Favorite could not be saved: " .. tostring(err))
             or enabled and (persistent and "Added to favorites" or "Favorited for this Neovim session") or "Removed from favorites"
+          if not err then self:set_notice(state.message, enabled and 'Favorite added' or 'Favorite removed') end
         elseif key == "<C-v>" then state.literal = true
         else state.query, state.query_cursor = Text.edit(state.query or "", state.query_cursor, key, raw); state.selected, state.selected_id = 1, nil end
       end

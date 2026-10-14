@@ -80,6 +80,7 @@ function M.definition()
         items = items, selected = selected, content = content, review = frame.data.review, required_facts = required_facts,
         required_footer = required_facts and T.review_footer or nil,
         message = frame.data.message or session.message, status = persistence,
+        notice = frame.data.notice or require('command_tree.session.feedback').notice(session),
         details = not frame.data.review and items[selected] and { description = items[selected].detail,
           reason = items[selected].disabled and items[selected].reason or nil } or nil,
         empty = "No settings in this section", help = opts.help },

@@ -111,7 +111,7 @@ local function entries(data, opts)
     if type(full) ~= 'string' and type(diagnostic.lines) == 'table' then full = table.concat(diagnostic.lines, '\n') end
     add(full or diagnostic.message, 'error')
   end
-  if not diagnostic or data.message ~= diagnostic.message then add(data.message, 'warning') end
+  if not diagnostic or data.message ~= diagnostic.message then add(data.message, data.message_role == 'normal' and 'normal' or 'warning') end
   add(data.error, 'error')
   if details then
     if details.reason and details.reason ~= data.message then add('Unavailable: ' .. details.reason, 'warning') end
@@ -152,11 +152,20 @@ function M.prepare(V, view, data, opts)
     or type(data.required_facts) == 'table' and next(data.required_facts) ~= nil
   local interactive = data.selected ~= nil or data.query ~= nil or data.input == true or data.content ~= nil
   local desired = maximum_height
-  if not review and not data.input and not data.required_label and not data.target and not data.required_notice then
-    if density == 'compact' then desired = math.min(maximum_height, (layout.rows or opts.compact_rows or 6) + 3 + vertical * 2)
+  if not review and not data.input and not data.required_label and not data.target and not data.required_notice
+    and data.content == nil then
+    -- Reserve a page of selectable rows, rather than sizing to the current
+    -- selection or last page. Dense modes need only their actual chrome;
+    -- descriptions and errors use the independently reserved details panel.
+    local chrome = 1 + (data.query ~= nil and 1 or 0)
+      + (model and model.information.title and border == 0 and 1 or 0)
+      + (model and model.decoration.separator and 1 or 0)
+      + (model and model.information.status and (density ~= 'minimal' or interactive) and 1 or 0)
+    if density == 'compact' then
+      desired = math.min(maximum_height, (layout.rows or opts.compact_rows or 6) + chrome + vertical * 2)
     elseif density == 'minimal' then
-      desired = not interactive and 1 + vertical * 2
-        or math.min(maximum_height, (layout.rows or opts.minimal_rows or 3) + 3 + vertical * 2)
+      desired = math.min(maximum_height, (interactive and (layout.rows or opts.minimal_rows or 3) or 0)
+        + chrome + vertical * 2)
     end
   end
   local main_height = math.max(1, math.min(desired, viewport.height - border))

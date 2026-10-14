@@ -1,6 +1,7 @@
 -- Full diagnostics are bounded host-local state, never profile/draft data.
 local M = {}
 local owners = setmetatable({}, { __mode = 'k' })
+local notices = setmetatable({}, { __mode = 'k' })
 local MAX_BYTES, MAX_LINES = 16384, 256
 local function bounded(value)
   local ok, text = pcall(tostring, value)
@@ -30,10 +31,23 @@ function M.current(state)
   end
   return owner.record
 end
+function M.notice(state)
+  local notice = notices[state]
+  if notice and notice.message == state.message then return notice end
+  if state then notices[state] = nil end
+end
 function M.attach(self)
+  function self:set_notice(message, summary)
+    local state = self.active
+    if not state then return end
+    local _, lines = bounded(message)
+    state.message = vim.fn.strcharpart(lines[1] or '', 0, 240)
+    notices[state] = { message = state.message, summary = vim.fn.strcharpart(summary or state.message, 0, 80) }
+  end
   function self:record_feedback(phase, error_value, command)
     local state = self.active
     if not state then return end
+    notices[state] = nil
     local input = state.input
     command = command or input and input.command or self:selected_command()
     local full, lines, truncated = bounded(error_value)

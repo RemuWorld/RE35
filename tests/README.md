@@ -62,6 +62,8 @@ interaction checks or performance measurements used for a release.
 | `test_navigation_feedback.lua` | Shared list wrapping, option-off clamping, full error inspection/return, restoration failure refusal, independent detail scrolling and native Editor return |
 | `test_fixed_panels.lua` | Stable main geometry, independent bounded details, legacy/preset and three-density behavior, tiny critical-scene refusal and complete window cleanup |
 | `test_shortcut_hints.lua` | Complete configurable key chords, grouped help spans, narrow wrapping, visible overflow controls and plain adapter-help compatibility |
+| `test_shortcut_guide.lua` | Right/below guide placement, complete controls, source bounds, editor focus and failed/stale float cleanup |
+| `test_status_placement.lua` | Explicit confirmation ownership, neutral title status, narrow fallback, Minimal policy and retained failure diagnostics |
 | `test_view_highlights.lua` | Readable descriptions/targets with dim comment colors, error severity across densities, and preserved explicit user highlights |
 | `test_guidance_persistence.lua` | Read-only integration status, native first-use routes, truthful Draft/Saved/Session only and actual profile/theme save failures |
 | `test_presentation_contract.lua` | Editor-independent preset schema, inheritance/standalone roots, six scenes, capability/fallback, strict data and size bounds |

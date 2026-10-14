@@ -46,9 +46,27 @@ content-sized layout, or `details.enabled = false` to keep inline feedback.
 Small viewports fall back to inline feedback. Required input/review/source
 facts remain visible or the associated effect is refused.
 
+Full places recognized keyboard controls in a separate panel on the right when
+the source viewport can fit every key and label. Narrower viewports keep them
+below; custom help prose remains below. Neither placement moves the main panel.
+Routine view-save and Settings confirmations use neutral text near the title;
+storage failures and diagnostics stay below. Small or title-free views keep
+their existing information policy.
+
+| View | Default information density |
+| --- | --- |
+| Full | Command context, icons, descriptions and a separate shortcut guide when space permits. |
+| Compact | Short key/name rows with less chrome and no unused navigation rows. |
+| Minimal | A borderless path strip, or a small selected-item neighborhood, with horizontal margins and no routine help/title. |
+
+Partial last pages retain their allocated row slots so navigation does not
+resize the main panel. Search adds its query row. Inputs, reviews and requested
+Results content retain the space needed for their facts.
+
 ### Text and color roles
 
-Command and group names use the same panel text color; `›` identifies a group.
+Branches use a leading `▸` and emphasized panel text; leaf commands use ordinary
+panel text. The selected item has a complete row highlight in every view.
 Keys and navigation icons share an accent. Descriptions, targets and shortcut
 labels use normal text; provider/type metadata stays secondary. Unavailable
 items are muted, warnings use `DiagnosticWarn`, and errors use `DiagnosticError`.

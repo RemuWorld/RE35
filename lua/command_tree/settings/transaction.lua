@@ -130,6 +130,10 @@ function M.apply(frame, ctx, session)
   cursor.backend_recovery = backend.applied_recovery(cursor.backend_recovery,result)
   cursor.message = require('command_tree.persistence').applied()
   if return_error then cursor.message = cursor.message .. ' · ' .. return_error end
+  local storage = CE().persistence_status().profile
+  if not return_error and (storage.state == 'saved' or storage.state == 'restored' or storage.state == 'session_only') then
+    cursor.notice = { message = cursor.message, summary = storage.scope == 'startup' and 'Saved · startup' or 'Session only' }
+  end
   frame.data.base, frame.data.base_runtime, frame.data.draft, frame.data.notes, frame.data.review = nil, nil, nil, nil, nil
   reopen(ctx, cursor, navigation, backend.applied_return(return_token, cursor.backend_recovery))
   return true, result
@@ -150,6 +154,7 @@ function M.undo(ctx, session)
   table.remove(journal)
   cursor.backend_recovery = require('command_tree.backend_editor').applied_recovery(cursor.backend_recovery,result)
   cursor.message = "Settings change undone · " .. require('command_tree.persistence').applied()
+  cursor.notice = { message = cursor.message, summary = 'Settings undone' }
   reopen(ctx, cursor, navigation)
   return true, result
 end
@@ -161,6 +166,7 @@ function M.reload(frame, ctx, session)
   local ok, result = CE().reload_profile()
   if not ok then message(frame, session, tostring(result)); return false, result end
   cursor.message = "Settings reloaded · saved profile is active"
+  cursor.notice = { message = cursor.message, summary = 'Settings reloaded' }
   reopen(ctx, cursor, navigation)
   return true, result
 end

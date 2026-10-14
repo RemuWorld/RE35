@@ -48,7 +48,8 @@ function M.attach(self)
     end
     local opts = vim.tbl_extend("force", {}, self.options.window, { density = state.density })
     local data = { title = "Commands", path = self.options.open_key .. " " .. path_label(state.path),
-      label = "Commands", items = {}, message = state.message, page = state.page, diagnostic = Feedback.current(state),
+      label = "Commands", items = {}, message = state.message, notice = Feedback.notice(state),
+      page = state.page, diagnostic = Feedback.current(state),
       help = "Esc Back  ·  " .. K.label(self.options.keys.search) .. " Search  ·  " .. K.label(self.options.keys.detail) .. " View  ·  " .. self.options.open_key .. " Close" }
     if state.mode == "search" or state.mode == "words" then
       local words = state.mode == "words"
