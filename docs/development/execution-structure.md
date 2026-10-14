@@ -1,10 +1,41 @@
-# Neovim execution structure
+# Architecture and execution
 
 Audience: maintainers. This describes execution, workflow and public-service
 ownership. Portable protocols and user configuration schemas have separate
 contracts. See the compatibility guide for host scope and known limitations.
 
-## Call direction
+## Core, hosts and tools
+
+RE35 connects command discovery, inputs, execution, Results and recovery through
+stable command identities. A profile declares the user's workflow; the host
+resolves local resources and carries out the admitted operation.
+
+| Layer | Location | Owns |
+| --- | --- | --- |
+| Portable Lua core | `lua/command_environment/core` | Command data, argument rules, document coordinates/plans, profile/workflow validation, provider reports, follow-up proposals and presentation resolution |
+| Neovim host | `lua/command_tree`, entered through `lua/re35.lua` | Session/workspaces, live buffers/windows, settings storage, LSP/plugin adapters, execution and owned Tasks/Results |
+| VS Code development host | `hosts/vscode` | Native controls, document revisions, local project/tool mapping, execution and host-owned Results/recovery |
+| Optional native bridge | `native/ce.c`, `native/ce.h`, `native/stdio.c` | Bounded transport and a Lua 5.1 runtime loading the same core sources |
+| Optional process owner | `native/process_scope.c` | Windows Job or Linux group ownership, separately from the core bridge |
+
+Neovim calls shared modules in process; its Session is a host implementation,
+not the portable Engine running inside another UI. VS Code reaches shared data
+operations through Protocol 1 and C ABI 1. C++/C# console examples demonstrate
+embedding that core. They do not supply a complete editor host.
+
+The core produces data and validates semantics. Live document versions, physical
+paths, executable identities, UI callbacks and permissions stay with the host.
+Portable profiles preserve declarations, including unsupported preferences;
+Tasks, live receipts and machine paths are not transferable profile state.
+See [coverage](../command-coverage.md) for current host differences and
+[portable core](../portable-core.md) for transport/build requirements.
+
+Existing engines provide capabilities: ripgrep can produce structured search
+results; editor APIs perform edits and LSP operations. A plugin-owned picker is
+an explicit handoff. Integration should retain command/source/provider identity
+and completion evidence wherever the backend exposes them.
+
+## Neovim call direction
 
 ```mermaid
 flowchart TD
@@ -28,7 +59,7 @@ The diagram shows responsibility and call direction. A running task can outlive
 its UI; not every completion returns to an open Session. Input and cancellation
 can be synchronous or delayed. A cancellation request is not proof of exit.
 
-## Owners and functions
+## Neovim owners and functions
 
 | Module | Responsibility | Entry or stages |
 | --- | --- | --- |
@@ -65,58 +96,6 @@ Model/Workspace/Recovery responsibilities are not merged into the coordinator.
 - Environment replacement can preserve running Executor jobs. Old invocations
   retain their admitted usage destination and context; UI receipts do not cross
   into a replacement environment.
-
-## VS Code workflow owners
-
-The optional desktop host has a separate native UI and live execution owner;
-the shared core still validates portable data. This table describes call
-direction rather than changing the Neovim modules above.
-
-| Module | Responsibility | Stages |
-| --- | --- | --- |
-| `workflow.js` | Profile/project selection and context/execution revisions | preview/apply, prepare/commit selection, invalidate |
-| `task-plan.js` | Fresh local executable, argv and cwd resolution | resolve, revalidate |
-| `task-inputs.js` | Saved file/editor ownership and explicit selected Save | capture, compare, save-selected |
-| `task-service.js` | One-use admission, original context, core completion and four retained Tasks | prepare current/original, validate, start, launch |
-| `task-sequence.js` | One active child across sequential steps | start, next step, cancel/force, terminal snapshot |
-| `task-results.js`, `result-locations.js` | Bounded diagnostics and private source navigation | capture, retain, jump/revalidate |
-| `task-recovery.js` | Private follow-up menu/selection and fresh original admission | actions, select, dispatch |
-| Native workflow/recovery/task/results UI modules | Native input and origin-aware navigation | inspect, Return, explicit Run/dirty-input choices |
-
-Recovery uses the existing Task admission and sequence owner; it introduces no
-second executor. Shared proposals carry display data only. Native controls
-call host services, and Results/recovery transitions use injected callbacks
-rather than cyclic module imports. Lazy service creation keeps document-only
-execution independent of recovery/process state. Asynchronous admission and
-process lifecycle remain complex even with these smaller responsibility scopes.
-
-## Configuration and public services
-
-`require('re35')` returns the same API table as `require('command_tree')`.
-Both names reach one lifecycle owner; there is no parallel environment or profile
-migration. The [configuration guide](../configuration.md) explains setup and
-saved-profile precedence without repeating the default option table.
-
-| Module | Responsibility | Call direction |
-| --- | --- | --- |
-| `init.lua` | Compatible public API and ordered entry guards | setup -> lifecycle; export -> lazy appearance-export service; rerun -> existing execution/recipe owner |
-| `environment/options.lua` | Setup defaults and host option validation | builder reads and validates one setup candidate |
-| `environment/builder.lua` | Construct a complete candidate from setup and profile data | options/profile -> registry, host services and Session |
-| `environment/lifecycle.lua` | Activate or restore a candidate; preserve admitted jobs and retire UI ownership | prepare -> activate; token/admit checks guard callbacks |
-| `environment/appearance_exports.lua` | Applied snapshot and protected destination for one export | per-call lifecycle/get -> UI or presentation export codec/writer |
-| `presentation.lua` | Host view options and negotiation | shared core capabilities/resolve -> host renderer options |
-
-The appearance service has no cached environment and is loaded only by
-`export_ui` or `export_presentation`. Snapshot capture, pending Settings refusal,
-the lifecycle token, snapshot comparison and protected-path rechecks remain in
-one ordered function.
-
-Rerun's ordered safety guards remain together. Renderer defaults for callers
-with partial view options remain host behavior; removing every repeated fallback
-would change that compatibility. Services share the existing lifecycle and
-capability declarations. See the [test guide](../../tests/README.md) for repeatable export, presentation
-and lifecycle checks.
-
 
 ## Recipe integration
 
@@ -200,3 +179,54 @@ Reload and multiple changes do not receive this automatic-return authorization.
 
 Simplifying review/navigation must preserve these ownership checks. The number
 of review screens is not itself a safety invariant.
+
+## VS Code workflow owners
+
+The optional desktop host has a separate native UI and live execution owner;
+the shared core still validates portable data. This table describes call
+direction rather than changing the Neovim modules above.
+
+| Module | Responsibility | Stages |
+| --- | --- | --- |
+| `workflow.js` | Profile/project selection and context/execution revisions | preview/apply, prepare/commit selection, invalidate |
+| `task-plan.js` | Fresh local executable, argv and cwd resolution | resolve, revalidate |
+| `task-inputs.js` | Saved file/editor ownership and explicit selected Save | capture, compare, save-selected |
+| `task-service.js` | One-use admission, original context, core completion and four retained Tasks | prepare current/original, validate, start, launch |
+| `task-sequence.js` | One active child across sequential steps | start, next step, cancel/force, terminal snapshot |
+| `task-results.js`, `result-locations.js` | Bounded diagnostics and private source navigation | capture, retain, jump/revalidate |
+| `task-recovery.js` | Private follow-up menu/selection and fresh original admission | actions, select, dispatch |
+| Native workflow/recovery/task/results UI modules | Native input and origin-aware navigation | inspect, Return, explicit Run/dirty-input choices |
+
+Recovery uses the existing Task admission and sequence owner; it introduces no
+second executor. Shared proposals carry display data only. Native controls
+call host services, and Results/recovery transitions use injected callbacks
+rather than cyclic module imports. Lazy service creation keeps document-only
+execution independent of recovery/process state. Asynchronous admission and
+process lifecycle remain complex even with these smaller responsibility scopes.
+
+## Configuration and public services
+
+`require('re35')` returns the same API table as `require('command_tree')`.
+Both names reach one lifecycle owner; there is no parallel environment or profile
+migration. The [configuration guide](../configuration.md) explains setup and
+saved-profile precedence without repeating the default option table.
+
+| Module | Responsibility | Call direction |
+| --- | --- | --- |
+| `init.lua` | Compatible public API and ordered entry guards | setup -> lifecycle; export -> lazy appearance-export service; rerun -> existing execution/recipe owner |
+| `environment/options.lua` | Setup defaults and host option validation | builder reads and validates one setup candidate |
+| `environment/builder.lua` | Construct a complete candidate from setup and profile data | options/profile -> registry, host services and Session |
+| `environment/lifecycle.lua` | Activate or restore a candidate; preserve admitted jobs and retire UI ownership | prepare -> activate; token/admit checks guard callbacks |
+| `environment/appearance_exports.lua` | Applied snapshot and protected destination for one export | per-call lifecycle/get -> UI or presentation export codec/writer |
+| `presentation.lua` | Host view options and negotiation | shared core capabilities/resolve -> host renderer options |
+
+The appearance service has no cached environment and is loaded only by
+`export_ui` or `export_presentation`. Snapshot capture, pending Settings refusal,
+the lifecycle token, snapshot comparison and protected-path rechecks remain in
+one ordered function.
+
+Rerun's ordered safety guards remain together. Renderer defaults for callers
+with partial view options remain host behavior; removing every repeated fallback
+would change that compatibility. Services share the existing lifecycle and
+capability declarations. See the [test guide](../../tests/README.md) for repeatable export, presentation
+and lifecycle checks.

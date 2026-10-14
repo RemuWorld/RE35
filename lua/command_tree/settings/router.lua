@@ -46,6 +46,7 @@ function M.items(frame, session)
   elseif not state.section then
     for _, section in ipairs({ "UI", "Commands", "Tools", "Projects", "Recipes", "Workspaces", "Backends" }) do add(result, section:lower(), section) end
     add(result, "more", "More settings commands")
+    add(result, "help", "Getting started and integration diagnostics")
   elseif sections[state.section] then result = sections[state.section].items(frame, session)
   elseif state.section == "projects" or state.section == "recipes" then result = require("command_tree.declaration_editor").rows(state, data)
   elseif state.section == "backends" then result = require("command_tree.backend_editor").rows(frame, data, session) end
@@ -60,6 +61,7 @@ function M.activate(frame, ctx, session)
   if item.disabled then return false, item.reason end
   if not state.section then
     if item.id == "more" then return session.workspace_open("settings-commands") end
+    if item.id == "help" then return session.workspace_open("help") end
     state.section, state.selected, state.selected_id = item.id, 1, nil
     return true
   end

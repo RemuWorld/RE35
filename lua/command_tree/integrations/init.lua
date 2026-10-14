@@ -24,7 +24,7 @@ function M.resolve(options)
   local resolved = {}
   if options.theme ~= false then
     resolved.theme = callbacks("theme", options.theme or require("command_tree.integrations.themes").new(),
-      { "items", "current", "preview", "commit" }, { "available" })
+      { "items", "current", "preview", "commit" }, { "available", "restore", "persistence_status" })
   end
   if options.runner ~= nil and options.runner ~= false then
     resolved.runner = callbacks("runner", options.runner, { "available", "build_and_run" }, { "results_items", "show_result" })

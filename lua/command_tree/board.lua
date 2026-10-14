@@ -2,6 +2,7 @@
 -- command registry and the session. No callbacks or process IDs are persisted.
 local V = require("command_tree.view")
 local M = {}
+local Lists = require('command_tree.list_navigation')
 
 local function registry(session)
   return session.workspace_registry or require("command_tree").registry()
@@ -104,9 +105,9 @@ function M.definition(spec)
   for id, delta in pairs({ next = 1, previous = -1, page_down = 10, page_up = -10 }) do
     actions[id] = { label = id:gsub("_", " "), hidden = true,
       control = id:sub(1, 5) == "page_" and id or nil,
-      run = function(frame, ctx, session)
+      run = function(frame, ctx, session, opts)
         local items = entries(frame, ctx, session)
-        frame.data.selected = math.max(1, math.min(#items, frame.data.selected + delta))
+        frame.data.selected = Lists.move(frame.data.selected, #items, delta, opts and opts.navigation)
         frame.data.selected_id = items[frame.data.selected] and items[frame.data.selected].id
         frame.data.message = nil
       end }

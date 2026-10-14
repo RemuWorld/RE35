@@ -112,9 +112,10 @@ the immutable reviewed snapshot; it does not reread or write the source file.
 
 Unsupported sections have explicit support feedback and remain unchanged in
 the active profile. The `project_search` adapter selects the implemented builtin
-or optional ripgrep provider; other adapters and layout/workspace/argument
-presets, slots/favorites/UI/appearance/command-link behavior are not implemented
-by merely retaining those declarations. Profiles currently live for the owning RE35 host
+or optional ripgrep provider. Presentation preferences apply to supported
+optional content, with explicit native style/geometry fallbacks. Other adapters,
+layout/workspaces, argument presets, slots/favorites, Neovim's eight-field UI and
+command links remain stored without activating those behaviors. Profiles live for the owning RE35 host
 service; configuration replacement or extension reload clears them. Import does
 not install persistent settings or automatically reactivate
 a file on startup.
@@ -252,8 +253,7 @@ Host/helper teardown requests owned termination and prevents a next launch.
 Supported compiler locations and owned search results follow the
 [Results/search contract](results-search-contract.md). Original-task retry
 follows the [recovery contract](task-recovery-contract.md).
-Linux process/service checks are separate from VS Code desktop interaction.
-A host integration must verify its own runtime and UI behavior.
+See [compatibility](../compatibility.md) for host support and limitations.
 
 Direct-child exit can leave inherited output pipes open in unowned descendants.
 The wrapper drains for at most two more seconds, closes those pipes, and marks

@@ -31,6 +31,8 @@ function M.export(lifecycle, get, path, presentation)
     for _, value in ipairs({ env.profile_path or false, env.preferences.path or false, env.usage.path or false }) do
       if type(value) == 'string' then paths[#paths + 1] = value end
     end
+    local theme = require('command_tree.persistence').snapshot(env).theme
+    if theme and type(theme.path) == 'string' then paths[#paths + 1] = theme.path end
     for _, buf in ipairs(vim.api.nvim_list_bufs()) do
       local name = vim.api.nvim_buf_get_name(buf)
       if name ~= '' then paths[#paths + 1] = name end

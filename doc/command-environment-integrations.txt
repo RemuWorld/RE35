@@ -16,9 +16,14 @@ THEME                                                    *ce-integration-theme*
 
 With no theme adapter, the picker discovers installed runtime colorschemes,
 previews the highlighted choice, restores the previous scheme and background
-on cancellation, and applies the selected scheme on confirmation. Setup itself
-does not change the colorscheme. This default adapter changes the current
-session; hosts which persist their own theme choice retain that responsibility.
+on cancellation, and applies the selected scheme on confirmation. Since 0.2.0,
+the default setup saves confirmed selections and restores them at startup.
+Candidate validation never changes the colorscheme. Set theme.persist = false
+for session-only behavior; theme.path selects another absolute local file.
+The default file is stdpath("state") .. "/re35/theme.json". Preview never saves.
+Failed restore keeps the current scheme; failed save keeps the applied session
+theme and an inspectable warning. Hosts with custom adapters keep their own
+storage and startup responsibility.
 Use integrations.theme = false to omit this command.
 
 An explicit theme adapter requires these callbacks: >
@@ -50,6 +55,14 @@ another preview, cancellation, or commit. Commit must apply the chosen theme
 itself. Error recovery and persistence belong to the adapter which owns those
 effects. The command ID is ui.theme; paths remain `sut` and `ut`. As in earlier
 versions, providers.plugins = false suppresses the theme command.
+
+Optional persistence_status() returns detached state/scope/path/error metadata.
+A custom adapter's optional restore() is not automatically called by RE35.
+The standalone integrations.themes.new() adapter remains session-only unless
+constructed with { persist = true }; callers which supply it own startup.
+The default setup constructs and restores its own builtin adapter.
+Ctrl-h inspects the bounded full preview or storage error without discarding
+the active input. Preview rollback failure blocks Apply until close/reopen.
 
 RUNNER                                                   *ce-integration-runner*
 

@@ -4,6 +4,7 @@ local V = require("command_tree.view")
 local C = require("command_tree.settings.common")
 local T = require("command_tree.settings.transaction")
 local R = require("command_tree.settings.router")
+local Lists = require('command_tree.list_navigation')
 local copy, profile, message = C.copy, C.profile, C.message
 local rows, normalize_route = R.items, R.normalize_route
 local activate, reset, reorder, back = R.activate, R.reset, R.reorder, R.back
@@ -31,9 +32,9 @@ function M.definition()
   for id, delta in pairs({ next = 1, previous = -1, page_down = 6, page_up = -6 }) do
     actions[id] = { label = id:gsub("_", " "), hidden = true,
       control = id:sub(1, 5) == "page_" and id or nil,
-      run = function(frame, _, session)
+      run = function(frame, _, session, opts)
         local items, selected = rows(frame, session)
-        selected = math.max(1, math.min(#items, selected + delta))
+        selected = Lists.move(selected, #items, delta, opts and opts.navigation)
         if frame.data.review then frame.data.review_selected = selected
         else frame.data.selected, frame.data.selected_id = selected, items[selected] and items[selected].id end
         message(frame, session, nil)
@@ -74,11 +75,13 @@ function M.definition()
           or frame.data.detail=="configurations" or frame.data.detail=="targets" then content[#content+1]="K/J Move row · d Remove" end
       end
       local drawn_path = opts.path .. " › " .. heading
+      local persistence = require('command_tree.persistence').settings(frame)
       V.draw(frame.view, { title = vim.trim(opts.title or "Settings"), path = drawn_path, label = heading,
         items = items, selected = selected, content = content, review = frame.data.review, required_facts = required_facts,
         required_footer = required_facts and T.review_footer or nil,
-        message = frame.data.message or session.message,
-        details = items[selected] and items[selected].disabled and { reason = items[selected].reason } or nil,
+        message = frame.data.message or session.message, status = persistence,
+        details = not frame.data.review and items[selected] and { description = items[selected].detail,
+          reason = items[selected].disabled and items[selected].reason or nil } or nil,
         empty = "No settings in this section", help = opts.help },
         vim.tbl_extend("force", opts.window or {}, { density = opts.density, accent = opts.accent }))
     end }

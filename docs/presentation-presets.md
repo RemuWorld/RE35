@@ -16,8 +16,9 @@ Full; **Clone preset** copies the source's effective base and all six scenes
 into a standalone preset. Later source or Full edits do not change the clone,
 including color components that originally inherited the host theme.
 
-A missing parent inherits configured Full. **Standalone defaults** instead uses
-the factory root, without another preset's declarations or scene overrides.
+A custom preset with no `extends` inherits configured Full; naming a nonexistent
+parent is invalid. **Standalone defaults** uses the factory root, without another
+preset's declarations or scene overrides.
 
 Edits use the existing Settings draft. Review the Before/After values, then
 press `a` to Apply, `x` to Discard or `e` to continue editing. Settings `u` restores
@@ -178,8 +179,7 @@ of list elision or filtering, with no action links or execution authority. The
 native form and query stay owned by the same review; use its explicit action to
 proceed. The display snapshot is bounded to 1 MiB, with one retained snapshot per
 service. An oversized required review is refused before its actions are offered.
-This native adapter is an implemented preference
-seam; actual screen approval and physical navigation remain separate acceptance.
+See [compatibility](compatibility.md) for host support and limitations.
 
 ## Export, import and restore
 
@@ -253,9 +253,7 @@ arrays in object positions, unknown versions, invalid inheritance, symbolic link
 incomplete reads and changed Settings/source ownership are refused. Reading or
 sharing appearance never runs code or authorizes a command.
 
-The portable preference model is implemented, and Neovim renders it. Appearance changes
-preserve selected result locations and Task identity across named Neovim
-presets, and keeps VS Code forms open across appearance changes. The native adapter reports
-fallbacks for unsupported geometry and style. This is not cross-host visual parity.
-Actual screen approval and ordinary-use validation remain unjudged; automated
-fixtures do not establish those judgments.
+Appearance changes preserve selected result locations and Task identity in
+Neovim, and keep VS Code forms open. Sharing preserves the declarations; each
+host reports fallbacks for unsupported geometry and style. It does not promise
+identical screens across hosts. See [compatibility](compatibility.md).

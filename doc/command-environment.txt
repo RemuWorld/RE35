@@ -1,4 +1,4 @@
-*command-environment*  RE35 Command Environment 0.1.0 for Neovim
+*command-environment*  RE35 Command Environment 0.2.0 for Neovim
 
 SETUP                                                   *ce-setup*
 
@@ -25,7 +25,7 @@ sources and inconsistent replacement plans are rejected; the host owns review
 authorization and retains the reviewed arguments or plan.
 See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
 The optional VS Code host supports a subset of the Neovim environment.
-Version 0.1.0. See docs/compatibility.md for host support and known limitations.
+Version 0.2.0. See docs/compatibility.md for host support and known limitations.
 
 OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
 
@@ -50,6 +50,25 @@ Inside a report, o explicitly toggles bounded output, Enter chooses a destinatio
 and a second Enter saves the exact reviewed snapshot without overwriting.
 Arguments, output, raw errors, paths, environment and history are excluded by
 default. Up/Down scrolls; Back returns to Tasks. See docs/configuration.md.
+
+NEOVIM USABILITY                                        *ce-0.2*
+
+0.2.0 remembers confirmed builtin themes across editor restarts;
+theme.persist = false keeps session-only changes. Preview never saves. Supplied
+custom theme adapters retain their own storage and startup responsibility.
+See |ce-integration-theme|.
+
+Single Up/Down selection wraps by default; navigation.wrap = false clamps it.
+Page/output scrolling and text editing do not wrap. The main command panel
+keeps a stable footprint; details appear below it. Shift-PageUp/Shift-PageDown
+scroll details, and Ctrl-h inspects the full bounded preview/storage error.
+Back returns to the same input. Minimal keeps a small borderless entry view.
+window.layout = "dynamic" selects the prior content-sized layout.
+
+Open Getting started with \sg, integration diagnostics with \sv, or use
+:checkhealth re35. Select Editor in Workspaces to close RE35 and return to the
+original native editing window. Draft, Saved, Session only and failed storage
+states distinguish actual persistence; integrations are never auto-installed.
 
 COMPLETION AND COMMAND STATUS                            *ce-status* *ce-v5.1*
 
@@ -175,7 +194,7 @@ the live workflow owner remain in place. Information rows are inspectable;
 execution or Apply requires an explicit action. Native geometry, colors and
 icons retain reported host fallbacks. Neovim's existing saved mode selection and
 session-only cycling during a pending Settings draft are unchanged.
-See docs/presentation-presets.md and tests/fixtures/presentation-inspection.json.
+See docs/presentation-presets.md and docs/compatibility.md.
 
 Important paths (after \):
   fs fo fr          Save / open / recent files
@@ -359,7 +378,7 @@ is rejected. A selected sequence is remembered per buffer in bounded memory,
 but reopening History never automatically restores a state. The list refreshes
 after restore. history.timeline_stay_open=false exits Timeline after restore;
 history.position overrides placement. require('re35').version is
-'0.1.0'.
+'0.2.0'.
 Tasks uses a theme color; j/k selects, Enter details, Esc returns, x/Ctrl-x
 cancels explicitly; r reruns a completed operation, s returns to its source.
 For failed recipes, c opens owned source Results or relevant step Settings.

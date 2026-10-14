@@ -57,7 +57,7 @@ function M.items(frame, session)
       local ok, available, why = pcall(commands.available, commands, theme.id, frame.ctx or session.ctx)
       add(result, "theme", "Theme", current or "Default", { disabled = not ok or not available,
         reason = not ok and tostring(available) or not available and why or nil,
-        detail = "Uses the theme provider's preview and commit; separate from profile drafts and settings Undo" })
+        detail = CE().persistence_status().theme.label .. '\nTheme selection is separate from profile drafts and Settings Undo.' })
     end
     add(result, '__presentation__', 'Presentation presets', nil, { detail = 'Create, edit and share named UI modes; review before Apply' })
     for _, spec in ipairs(ui) do add(result, spec.id, spec.label, ui_value(frame, data, spec), { field = spec }) end

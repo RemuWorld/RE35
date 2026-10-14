@@ -57,6 +57,13 @@ end
 
 function M.close(view)
   if not view then return true end
+  local detail_failure
+  if view.details then
+    local details = view.details
+    view.details = nil
+    local ok, reason = M.close(details)
+    if not ok then view.details, detail_failure = details, reason end
+  end
   local win, buf = view.win, view.buf
   -- WinClosed/BufWipeout observers must see the UI as detached while Neovim
   -- destroys it, otherwise a routine redraw can recursively close its session.
@@ -72,9 +79,14 @@ function M.close(view)
   close(buf, vim.api.nvim_buf_is_valid, function(value) vim.api.nvim_buf_delete(value, { force = true }) end)
   view.win = win and vim.api.nvim_win_is_valid(win) and win or nil
   view.buf = buf and vim.api.nvim_buf_is_valid(buf) and buf or nil
-  if view.win or view.buf then return false, table.concat(failures, "; ") end
+  if detail_failure then failures[#failures + 1] = detail_failure end
+  if view.win or view.buf or view.details then return false, table.concat(failures, "; ") end
   if view.presentation_slot then presentation_slots[view.presentation_slot], view.presentation_slot = nil, nil end
   return true
+end
+
+function M.scroll_details(view, delta)
+  return require('command_tree.view.panels').scroll(M, view, delta)
 end
 
 function M.window(view, lines, config, frame)
@@ -125,12 +137,15 @@ end
 
 
 function M.presentation_review_status(data, opts)
-  if not opts or not opts.presentation then return true end
+  opts = require('command_tree.view.panels').critical_options(data or {}, opts or {})
+  if not opts.presentation then return true end
   return require('command_tree.view.presentation').required_status(M, data, opts)
 end
 
-function M.draw(view, data, opts)
+local function draw(view, data, opts)
   opts = opts or {}
+  local Panels = require('command_tree.view.panels')
+  data, opts = Panels.prepare(M, view, data, opts)
   if opts.presentation then
     local groups = presentation_roles(view, opts.presentation, opts.accent)
     if not groups then
@@ -167,6 +182,7 @@ function M.draw(view, data, opts)
   local max_width = math.max(1, target and target.width - border or vim.o.columns - border - 2)
   local window_limit = math.min(max_width, opts.max_width or 72)
   local padding = density == "minimal" and math.min(2, math.max(0, math.floor((window_limit - 4) / 2))) or 0
+  if opts._fixed_panel then padding = math.min(padding, math.max(0, math.floor((opts._fixed_panel.width - 1) / 2))) end
   local limit = math.max(1, window_limit - padding * 2)
   local width = math.max(1, math.min(limit, (opts.width or 48) - padding * 2))
   local interactive = data.selected ~= nil or data.query ~= nil or data.input == true or data.content ~= nil
@@ -188,11 +204,13 @@ function M.draw(view, data, opts)
     key_width = math.min(key_width, math.max(1, limit - 14))
     width = math.min(limit, math.max(width, key_width + name_width + 8))
   end
+  if opts._fixed_panel then width = math.max(1, opts._fixed_panel.width - padding * 2) end
   local repeated_reason = data.details and data.details.reason and data.details.reason == data.message
   local detail_rows = data.details and (density == "full" and (repeated_reason and 2 or 3)
     or data.details.reason and not repeated_reason and 1 or 0) or 0
   local content_rows = data.content and #data.content or 0
   local max_height = math.max(1, target and target.height - border or vim.o.lines - vim.o.cmdheight - border - 1)
+  if opts._fixed_panel then max_height = opts._fixed_panel.height end
   local header_rows = 1 + (data.query ~= nil and 1 or 0) + (density == "full" and 1 or 0)
   local feedback_rows = (data.message and 1 or 0) + (density == "full" and (data.status and 1 or 0) + (data.help and 2 or 0) or 0)
   local available = math.max(1, target and max_height - header_rows - detail_rows - content_rows - feedback_rows
@@ -334,9 +352,10 @@ function M.draw(view, data, opts)
       end
     end
     if data.status and density == "full" then line({ { "  " .. data.status, "CommandTreeMuted" } }, 0) end
-    if data.message or data.help and density == "full" then
+    if data.message or data.error or data.help and density == "full" then
       if density == "full" then line({ { "", "CommandTreeMuted" } }, 0) end
-      line({ { ((density == "minimal" or width < 5) and "" or "  ") .. (data.message or data.help), data.message and "CommandTreeWarning" or "CommandTreeMuted" } }, 0)
+      line({ { ((density == "minimal" or width < 5) and "" or "  ") .. (data.message or data.error or data.help),
+        (data.message or data.error) and "CommandTreeWarning" or "CommandTreeMuted" } }, (data.message or data.error) and 5 or 0)
     end
     if pages > 1 and density == "full" then
       local paging = range_first and ("  ↑/↓  ·  %d–%d of %d"):format(range_first, range_last, #data.items)
@@ -371,7 +390,7 @@ function M.draw(view, data, opts)
   if density == "minimal" then
     local used = 1
     for _, text in ipairs(lines) do used = math.max(used, M.width(text)) end
-    width = math.min(width, used)
+    if not opts._fixed_panel then width = math.min(width, used) end
     -- Horizontal breathing room keeps this a short reading strip. Do not
     -- add empty vertical rows; narrow panels yield padding before content.
     for index, text in ipairs(lines) do lines[index] = string.rep(" ", padding) .. text .. string.rep(" ", padding) end
@@ -401,6 +420,7 @@ function M.draw(view, data, opts)
     end
     config.title_pos, config.footer, config.footer_pos = "left", "", "right"
   end
+  Panels.main(view, lines, config, opts)
   M.window(view, lines, config)
   if view.presentation_slot then presentation_slots[view.presentation_slot], view.presentation_slot = nil, nil end
   if opts.accent then
@@ -415,8 +435,19 @@ function M.draw(view, data, opts)
       vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
     end
   end
+  Panels.draw(M, view, data, opts)
   vim.cmd.redraw()
   return data.page, pages
+end
+
+function M.draw(view, data, opts)
+  local ok, page, pages = pcall(draw, view, data, opts)
+  if not ok then
+    local closed, reason = M.close(view)
+    if not closed then page = tostring(page) .. '; panel cleanup: ' .. tostring(reason) end
+    error(page, 0)
+  end
+  return page, pages
 end
 
 return M

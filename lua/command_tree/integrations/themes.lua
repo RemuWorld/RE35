@@ -1,9 +1,23 @@
 local M = {}
 
--- Runtime colorschemes need no plugin-specific setup. Hosts which own presets
--- or persistence can replace this adapter with their own callbacks.
-function M.new()
-  local adapter = {}
+-- Runtime colorschemes need no plugin-specific setup. Persistence is explicitly
+-- opt-in, belongs to this host, and is activated by restore() after setup succeeds.
+-- Hosts which own presets or persistence can replace the whole adapter.
+function M.new(options)
+  options = options or {}
+  assert(type(options) == 'table', 'Theme adapter options must be a table')
+  for field in pairs(options) do
+    assert(field == 'persist' or field == 'path', 'Unknown theme adapter option: ' .. tostring(field))
+  end
+  assert(options.persist == nil or type(options.persist) == 'boolean', 'Theme persist must be a boolean')
+  assert(options.path == nil or type(options.path) == 'string', 'Theme storage path must be a string')
+  local State = require('command_tree.integrations.theme_state')
+  local enabled = options.persist == true
+  local path = options.path and State.path(options.path) or (vim.fn.stdpath('state') .. '/re35/theme.json')
+  local status = { enabled = enabled, state = 'session_only', scope = 'session', path = enabled and path or nil }
+  local adapter = { builtin = true, id = 'runtime-colorschemes' }
+  function adapter.persistence_status() return vim.deepcopy(status) end
+  adapter._builtin_persistence_status = adapter.persistence_status
   function adapter.items()
     local result, seen = {}, {}
     for _, name in ipairs(vim.fn.getcompletion("", "color")) do
@@ -20,18 +34,22 @@ function M.new()
   -- Neovim supplies built-in colorschemes; an empty custom runtime is handled
   -- by the common select-input validation.
   local function apply(name)
-    assert(type(name) == "string" and name ~= "", "Choose a colorscheme")
+    assert(State.name(name), "Choose a valid colorscheme name (up to 128 bytes, without paths or control characters)")
     vim.api.nvim_cmd({ cmd = "colorscheme", args = { name } }, {})
   end
   local function snapshot()
     local previous, background = adapter.current(), vim.o.background
     return function()
-      vim.o.background = background
+      -- A failed scheme may have assigned colors_name before raising. Loading
+      -- the previous scheme first prevents background's automatic reload from
+      -- executing that failing scheme a second time during rollback.
       apply(previous)
+      vim.o.background = background
     end
   end
-  local function change(name)
+  local function change(name, background)
     local restore = snapshot()
+    if background then vim.o.background = background end
     local ok, failure = pcall(apply, name)
     if not ok then
       local restored, restore_error = pcall(restore)
@@ -48,7 +66,39 @@ function M.new()
   end
   function adapter.commit(_, args)
     local restore, failure = change(args.theme)
-    return restore ~= nil, failure
+    if not restore then return false, failure end
+    status = { enabled = enabled, theme = args.theme, state = 'session_only', scope = 'session', path = enabled and path or nil }
+    local result = { theme = args.theme }
+    if enabled then
+      local saved, save_error = State.write(path, args.theme, vim.o.background)
+      if saved then status.state, status.scope = 'saved', 'startup'
+      else
+        status.state, status.error = 'save_failed', tostring(save_error)
+        result.warning = 'Theme applied for this session, but saving for startup failed: ' .. tostring(save_error)
+      end
+    end
+    result.persistence = adapter.persistence_status()
+    return true, result
+  end
+  function adapter.restore()
+    if not enabled then return true, adapter.persistence_status() end
+    local data, failure = State.read(path)
+    if data == false then
+      status = { enabled = true, state = 'no_saved_theme', scope = 'session', path = path }
+      return true, adapter.persistence_status()
+    end
+    if data then
+      local changed, apply_error = change(data.theme, data.background)
+      if changed then
+        status = { enabled = true, state = 'restored', scope = 'startup', path = path, theme = data.theme }
+        return true, adapter.persistence_status()
+      end
+      failure = apply_error
+    end
+    -- An unavailable or malformed saved theme preserves the current editor
+    -- colorscheme and its file, rather than selecting a different theme silently.
+    status = { enabled = true, state = 'restore_failed', scope = 'session', path = path, error = tostring(failure) }
+    return false, adapter.persistence_status()
   end
   return adapter
 end

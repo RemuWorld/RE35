@@ -1,7 +1,7 @@
 local M = {}
 
 function M.check()
-  vim.health.start("Command Environment")
+  vim.health.start("RE35")
   if vim.fn.has("nvim-0.11") == 1 then vim.health.ok("Neovim API requirement satisfied")
   else vim.health.error("Command Tree requires Neovim 0.11 or later") end
   if package.loaded["which-key"] then
@@ -31,12 +31,19 @@ function M.check()
     for name, status in pairs(environment.persistence_status()) do
       if status.load_error then vim.health.warn(name .. ": " .. status.load_error) end
       if status.save_error then vim.health.warn(name .. ": " .. status.save_error) end
-      if not status.load_error and not status.save_error then
-        vim.health.info(name .. ": " .. (status.path and "persistent state ready" or "memory only"))
+      if status.error then vim.health.warn(name .. ': ' .. status.error) end
+      if not status.load_error and not status.save_error and not status.error then
+        vim.health.info(name .. ": " .. (status.label or (status.scope == 'startup' and 'persistent storage configured' or 'session only')))
       end
     end
   end
-  vim.health.info("Use :CommandEnvironment, :CommandEnvironmentRefresh, and :CommandTreeKeys")
+  local report, err = environment.integration_status()
+  if report then
+    for _, item in ipairs(report) do
+      vim.health.info(item.name .. ': ' .. (item.reason or item.detail or ''))
+    end
+  else vim.health.warn('Integration status: ' .. tostring(err)) end
+  vim.health.info("Open Settings > Getting started, or use \\sg / \\sv for integration diagnostics")
 end
 
 return M

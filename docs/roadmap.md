@@ -7,9 +7,10 @@ explicit host contracts keep that model reusable.
 
 ## Current scope
 
-RE35 0.1.0 includes the Neovim command environment, bounded document search
-and replacement, sequential project recipes, owned Tasks/Results,
-original-context recovery and editable presentation presets.
+RE35 0.2.0 includes the command, recipe, Results/recovery and presentation
+workflows from 0.1.0, with remembered themes, list wrapping, inspectable
+errors, storage-state labels, first-use guidance, an Editor return destination
+and independent command/details panels.
 
 The optional VS Code desktop host supports the documented document, profile,
 project, recipe, Results, recovery and appearance workflows. The optional C ABI

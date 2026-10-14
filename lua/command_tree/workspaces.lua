@@ -76,6 +76,7 @@ local function save_state(self, frame, data, errors)
 end
 
 local controls = { ["<Esc>"] = "back", ["<BS>"] = "back", ["<C-c>"] = true, ["<F1>"] = true,
+  ['<S-PageDown>'] = true, ['<S-PageUp>'] = true,
   ["<C-d>"] = "page_down", ["<C-u>"] = "page_up", ["\\"] = true, ["?"] = true, ["<C-w>"] = true }
 
 local function key_token(key)
@@ -137,7 +138,7 @@ function Manager:configure(overrides, reserved)
   if reserved.global then reserved = reserved.global end
   -- Accept either { ['?']=true } or the session options.keys name -> key form.
   for key, value in pairs(reserved) do
-    local named = ({ close = true, detail = true, execute = true, search = true, workspaces = true,
+    local named = ({ close = true, detail = true, details_down = true, details_up = true, execute = true, search = true, workspaces = true,
       recent = true, favorites = true, favorite = true, words = true, inspect = true })[key]
     if named and type(value) == "string" then
       -- Enter is the ordinary accept action of each workspace. The session's
@@ -604,7 +605,7 @@ function M.new()
     page_down = { "Page down", "<C-d>", true, "page_down" }, page_up = { "Page up", "<C-u>", true, "page_up" } }) do
     history_actions[id] = { label = entry[1], hidden = entry[3], control = entry[4], run = function(frame, _, _, opts)
       frame.data.message = nil
-      return H.handle(frame.data, entry[2], opts.history)
+      return H.handle(frame.data, entry[2], vim.tbl_extend('force', {}, opts.history or {}, { navigation = opts.navigation }))
     end }
   end
   manager:register({
@@ -626,7 +627,7 @@ function M.new()
       local history = vim.tbl_extend("force", {
         position = "bottom-right", width = 38, preview_max_lines = 10000, restore_lines = 6,
       }, opts.history or {}, { title = opts.title, density = opts.density,
-        presentation = opts.presentation,
+        presentation = opts.presentation, navigation = opts.navigation,
         action_keys = opts.action_keys, help = opts.help,
         detail_key = require("command_tree.keys").label((opts.keys or {}).detail or "?"), close_key = opts.open_key or "\\" })
       frame.data.path_label = opts.path
@@ -637,7 +638,7 @@ function M.new()
     end,
     handle = function(frame, key, _, session, opts)
       frame.data.message = nil
-      return H.handle(frame.data, key, opts.history)
+      return H.handle(frame.data, key, vim.tbl_extend('force', {}, opts.history or {}, { navigation = opts.navigation }))
     end,
   })
   manager:register(require("command_tree.tasks").definition())

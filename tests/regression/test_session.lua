@@ -13,7 +13,12 @@ local count=0
 local function check(value,name) count=count+1;assert(value,name..' '..vim.inspect(CE.state())) end
 local function keys(value) for _,key in ipairs(K.tokens(value)) do session:handle(key) end end
 local function open(opts) CE.close();CE.open(vim.tbl_extend('force',{interactive=false},opts or {})) end
-local function rendered() return table.concat(vim.api.nvim_buf_get_lines(session.active.view.buf,0,-1,false),'\n') end
+local function rendered()
+  local view = session.active.view
+  local output = { table.concat(vim.api.nvim_buf_get_lines(view.buf,0,-1,false),'\n') }
+  if view.details and view.details.buf then output[#output+1] = table.concat(vim.api.nvim_buf_get_lines(view.details.buf,0,-1,false),'\n') end
+  return table.concat(output,'\n')
+end
 local saved
 CE.register({id='test.review',path='x',name='Review input',arguments={{name='first',required=true},{name='second',secret=true}},run=function(_,args) saved=args end})
 open({command='test.review'});keys('hello<CR>private<CR>')

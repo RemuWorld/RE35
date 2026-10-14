@@ -127,6 +127,18 @@ function M.attach(self)
   end
 
   function self:enter_workspace(id, options)
+    local definition = self.workspaces:get(id)
+    if definition and definition.destination == 'editor' then
+      local state = self.active
+      if not state or not K.valid(state.ctx) then return false, 'Original editor window is no longer available' end
+      if state.workspace_mutating then return false, 'Workspace lifecycle is already changing' end
+      if not self:clear_preview() then return false, state.message end
+      local win = state.ctx.win
+      self:close()
+      if not vim.api.nvim_win_is_valid(win) then return false, 'Original editor window is no longer available' end
+      local ok, why = pcall(vim.api.nvim_set_current_win, win)
+      return ok, not ok and tostring(why) or nil
+    end
     local state, origin = self.active, snapshot(self.active)
     local frame, err, pushed = self.workspaces:push(state, id, options)
     if not frame then return false, err end
@@ -145,6 +157,13 @@ function M.attach(self)
     local state = self.active
     if not state then return false, 'Command session is closed' end
     local ctx = state.ctx
+    if state.mode == 'feedback' then
+      local record = state.feedback_inspection
+      state.feedback_inspection = nil
+      self:pop_mode(true)
+      if self.active == state then state.message = record and record.message end
+      return true
+    end
     if not self:clear_preview() then return false, state.message end
     if state.mode == "workspace" then
       local settings_frame = self.workspaces:active(state)

@@ -91,7 +91,7 @@ H.eq('fixture.run', CE.profile().slots['1'], 'Apply also commits the retained st
 H.eq('compact', session.active.density, 'A reset profile inherits saved density instead of factory full')
 H.eq(66, frame().data.window.width, 'The reopened UI inherits local width')
 H.eq('top-right', frame().data.window.position, 'The reopened UI inherits local placement')
-H.eq('Settings applied', frame().data.message)
+H.eq('Settings applied in memory · this session only', frame().data.message)
 other_state(CE.profile())
 keys('u')
 H.eq(original.ui, CE.profile().ui, 'Undo restores exact prior UI overrides')

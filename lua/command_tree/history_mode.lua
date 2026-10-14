@@ -2,6 +2,7 @@
 require("command_tree.history")
 local K, V = require("command_tree.keys"), require("command_tree.view")
 local M = {}
+local Lists = require('command_tree.list_navigation')
 local ns = vim.api.nvim_create_namespace("HistoryPreview")
 M.namespace = ns
 
@@ -347,13 +348,13 @@ function M.handle(state, key, opts)
       state.timeline = nil
       V.close(state.timeline_view)
     elseif key == "j" or key == "<Down>" or key == "<C-n>" then
-      timeline.selected = math.min(#timeline.entries, timeline.selected + 1)
+      timeline.selected = Lists.move(timeline.selected, #timeline.entries, 1, opts.navigation)
     elseif key == "k" or key == "<Up>" or key == "<C-p>" then
-      timeline.selected = math.max(1, timeline.selected - 1)
+      timeline.selected = Lists.move(timeline.selected, #timeline.entries, -1, opts.navigation)
     elseif key == "<C-d>" or key == "<PageDown>" then
-      timeline.selected = math.min(#timeline.entries, timeline.selected + 10)
+      timeline.selected = Lists.move(timeline.selected, #timeline.entries, 10, opts.navigation)
     elseif key == "<C-u>" or key == "<PageUp>" then
-      timeline.selected = math.max(1, timeline.selected - 10)
+      timeline.selected = Lists.move(timeline.selected, #timeline.entries, -10, opts.navigation)
     elseif key == "<CR>" or key == "<Right>" then
       return restore(state, opts)
     elseif key == "u" or key == "r" then

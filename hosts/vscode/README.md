@@ -17,7 +17,7 @@ extension, not a Marketplace release or a prebuilt VSIX.
 ## Build and open
 
 Build the repository's optional native targets using the instructions in
-[portable-core.md](../../docs/portable-core.md). The new `ce_stdio` executable
+[portable-core.md](../../docs/portable-core.md). The `ce_stdio` executable
 uses the adjacent bridge library and an explicitly supplied Lua 5.1 ABI runtime.
 Neither the extension nor setup downloads a runtime or compiles anything.
 Rebuild the helper when the portable core module manifest changes; replacing
@@ -56,8 +56,8 @@ profile/local defaults clears it. **RE35: Export Presentation Presets** and
 **RE35: Import Presentation Presets** share the bounded appearance-only file,
 with conflict/fallback review and explicit Apply/Discard. Unsupported declarations
 remain portable. See [presentation presets](../../docs/presentation-presets.md)
-for precedence and restoration. The helper must use the current 17-module core
-manifest before using these commands.
+for precedence and restoration. Build the helper and load Lua sources from the
+same revision so their core module manifests agree.
 
 Run **RE35: Open Command Environment** from the Command Palette. Search and
 replacement are the same `search.document` and `edit.replace_literal` IDs used
@@ -172,8 +172,7 @@ use the original explicit action in the form. One snapshot of at most 1 MiB is
 retained per presentation service. Native rows may still elide text visually;
 the complete document provides scrollable access rather than claiming unclipped
 list pixels. Required review text above that bound is refused before Run/Apply
-choices are offered. The implemented native adapter is separate from
-actual visual approval, physical gestures and human-time acceptance.
+choices are offered.
 
 ## Run a recipe
 
@@ -297,40 +296,14 @@ See [provider semantics and limits](../../docs/search-providers.md).
 
 ## Verify
 
-The independent transport fixture uses Node and the actual C ABI helper:
+After opening the development host, use **RE35: Open Command Environment** to
+search a disposable document. Check a result, preview a literal replacement,
+then Discard; applying a replacement should be reversible with editor Undo.
+For recipes, load a profile, select its local Project context and inspect the
+literal invocation before Run. After a failed run, inspect Results, repair the
+source and retry the original Task rather than the current selection.
 
-```sh
-node hosts/vscode/test/transport.js /absolute/build/ce_stdio /absolute/runtime /absolute/RE35/lua
-```
-
-The [extension fixture](test/extension.js) runs inside VS Code's real Extension
-Development Host. Supply absolute `RE35_HOST_TEST_DIR`, `RE35_TEST_HELPER`,
-`RE35_TEST_LUA_RUNTIME` and `RE35_TEST_CORE` environment values; then add
-`--extensionTestsPath=/absolute/RE35/hosts/vscode/test/extension.js`. Use new
-`--user-data-dir`, `--extensions-dir` and workspace directories for each run.
-The test workspace must be trusted, AutoSave must be off, and the fixture creates
-only its document/project/profile fixture files and JSON report below `RE35_HOST_TEST_DIR`.
-
-The immutable-snapshot runner prepares those isolated settings and paths:
-
-```sh
-python tests/acceptance/run_vscode_host.py \
-  --code /absolute/path/to/code \
-  --helper /absolute/build/ce_stdio \
-  --lua-runtime /absolute/runtime \
-  --report .artifacts/usage/vscode-integration.json
-```
-
-This fixture exercises actual documents, edits, selections and Undo, including
-CRLF, emoji, unsaved text, stale reviews, retry and cancellation, concurrent/disposed
-helper startup, full profile preservation and actual local project selection. It does not
-automate physical QuickPick/diff gestures or establish latency, Linux desktop,
-web/remote, LSP or complete Workspace compatibility. With explicit `--node`,
-`--process-helper` and recipe-tool options, additional fixtures exercise actual
-sequential tasks, owned termination and checkout configure/build/validation.
-Adding `--ripgrep /absolute/bin/rg` with the existing Node/compiler options checks
-actual compiler diagnostics, owned navigation and both search providers.
-The same compiler/Node options exercise failure -> Results -> editor repair ->
-fresh original retry, local Settings repair and stale/foreign/consumed owners.
-Controlled callback tests and headless Linux service checks are separate from
-native desktop interaction and physical UI acceptance.
+Maintainers can run the isolated [desktop host validation runner](../../tests/acceptance/run_vscode_host.py)
+and [transport fixture](test/transport.js), supplying existing helper/runtime
+paths. These checks do not establish web/remote, LSP or complete
+Neovim Workspace compatibility; see [compatibility](../../docs/compatibility.md).

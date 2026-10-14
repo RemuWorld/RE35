@@ -4,6 +4,7 @@
 local K, V = require("command_tree.keys"), require("command_tree.view")
 local Text = require("command_tree.text")
 local M = {}
+local Lists = require('command_tree.list_navigation')
 local names = { diagnostics = "Diagnostics", quickfix = "Quickfix", loclist = "Location list", task = "Task results" }
 
 -- Provenance describes a result; it never authorizes a child task or a jump.
@@ -281,9 +282,9 @@ function M.definition()
   end
   for id, delta in pairs({ next = 1, previous = -1, page_down = 10, page_up = -10 }) do
     actions[id] = { label = id:gsub("_", " "), hidden = true,
-      control = id:sub(1, 5) == "page_" and id or nil, run = function(frame)
+      control = id:sub(1, 5) == "page_" and id or nil, run = function(frame, _, _, opts)
         local items = frame.data.items or {}
-        frame.data.selected = math.max(1, math.min(#items, (frame.data.selected or 1) + delta))
+        frame.data.selected = Lists.move(frame.data.selected, #items, delta, opts and opts.navigation)
         frame.data.selected_id = items[frame.data.selected] and items[frame.data.selected].id
         frame.data.message = nil
       end }
@@ -326,7 +327,7 @@ function M.definition()
         frame.data.filter_cursor = frame.data.filter_before_cursor or vim.fn.strchars(frame.data.filter)
         frame.data.selected, frame.data.selected_id = frame.data.filter_before_selected, frame.data.filter_before_selected_id
       elseif key == "<CR>" then frame.data.input_active = false
-      elseif key == "<Up>" or key == "<Down>" then actions[key == "<Up>" and "previous" or "next"].run(frame)
+      elseif key == "<Up>" or key == "<Down>" then actions[key == "<Up>" and "previous" or "next"].run(frame, nil, nil, opts)
       else
         local value, cursor = Text.edit(frame.data.filter, frame.data.filter_cursor, key)
         if #value <= 4096 then frame.data.filter, frame.data.filter_cursor = value, cursor end
@@ -341,6 +342,7 @@ function M.definition()
       if result and result.truncated and frame.data.source ~= "task" then status = (status and status .. "\n" or "") .. "Showing the first 5000 results" end
       V.draw(frame.view, { title = vim.trim(opts.title or "Results"), path = opts.path,
         required_label = frame.data.source == 'task' and result and result.title or nil,
+        required_notice = result and result.truncated and (result.status_message or status or 'Partial results; output limit reached') or nil,
         target = item and item.detail or nil,
         label = (frame.data.source == "task" and result and result.title or names[frame.data.source]) .. (frame.data.source == "diagnostics" and (frame.data.scope == "buffer" and " · current buffer" or " · all buffers") or "")
           .. " · " .. #(frame.data.items or {}) .. " results",

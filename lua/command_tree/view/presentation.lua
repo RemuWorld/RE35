@@ -21,6 +21,7 @@ local function geometry(V, data, opts)
   local available_width = math.max(1, target and target.width - border or vim.o.columns - border - 2)
   local window_limit = math.max(1, math.min(available_width, layout.max_width))
   local padding = math.min(model.spacing.horizontal, math.max(0, math.floor((window_limit - 1) / 2)))
+  if opts._fixed_panel then padding = math.min(padding, math.max(0, math.floor((opts._fixed_panel.width - 1) / 2))) end
   local limit = math.max(1, window_limit - padding * 2)
   local width = math.max(1, math.min(limit, layout.width - padding * 2))
   local path = tostring(data.path or '\\')
@@ -33,8 +34,10 @@ local function geometry(V, data, opts)
       if width == limit then break end
     end
   end
+  if opts._fixed_panel then width = math.max(1, opts._fixed_panel.width - padding * 2) end
   local max_height = math.max(1, math.min(layout.max_height,
     target and target.height - border or vim.o.lines - vim.o.cmdheight - border - 1))
+  if opts._fixed_panel then max_height = opts._fixed_panel.height end
   local vertical = math.min(model.spacing.vertical, math.max(0, math.floor((max_height - 2) / 2)))
   local body_height = math.max(1, max_height - vertical * 2)
   return { target = target, border = border, requested_border = requested_border, padding = padding,
@@ -65,7 +68,8 @@ local function preflight(V, data, opts, prepared, page_size)
   local groups, items = data.required_facts or {}, data.items or {}
   if type(groups) ~= 'table' then return false, incomplete, 1 end
   local active = review or next(groups) ~= nil
-  if not active then return true, nil, page_size end
+  local facts = data.required_label or data.target or data.required_notice
+  if not active and not facts then return true, nil, page_size end
   if not vim.islist(groups) or review and not vim.islist(items) then return false, incomplete, 1 end
   local complete, common, longest = true, 1, 1
   local costs = {}
@@ -75,6 +79,17 @@ local function preflight(V, data, opts, prepared, page_size)
     costs[text] = rows or false
     if not rows then complete = false; return height + 1 end
     return rows
+  end
+  if not active then
+    for _, text in ipairs({ data.required_label or false, data.target and 'Target: ' .. data.target or false,
+      data.required_notice or false }) do
+      if text then common = common + cost(text) end
+    end
+    if data.query ~= nil then common = common + 1 end
+    if not complete or common + 1 > height then
+      return false, 'Required source or owner facts do not fit this viewport; enlarge it or reduce presentation spacing', 1
+    end
+    return true, nil, math.max(1, math.min(page_size, height - common))
   end
   if review and data.input and data.label then common = common + cost(data.label) end
   if review and data.details then common = common + cost('Target: ' .. (data.details.target or 'current buffer')) end
@@ -119,7 +134,8 @@ end
 
 function P.required_status(V, data, opts)
   if not opts or not opts.presentation then return true end
-  return preflight(V, data or {}, opts, geometry(V, data or {}, opts), opts.presentation.layout.rows)
+  local prepared_data, prepared_opts = require('command_tree.view.panels').prepare(V, {}, data or {}, opts)
+  return preflight(V, prepared_data, prepared_opts, geometry(V, prepared_data, prepared_opts), opts.presentation.layout.rows)
 end
 
 function P.draw(V, view, data, opts, groups)
@@ -151,7 +167,7 @@ function P.draw(V, view, data, opts, groups)
   view.presentation_review_complete, view.presentation_review_reason = review and true or nil, nil
   view.presentation_options = vim.deepcopy(opts)
   view.presentation_input_complete, view.presentation_input_reason = data.input and true or nil, nil
-  view.presentation_facts_complete, view.presentation_facts_reason = (data.required_label or data.target) and true or nil, nil
+  view.presentation_facts_complete, view.presentation_facts_reason = (data.required_label or data.target or data.required_notice) and true or nil, nil
   local lines, marks, priorities, indices, critical = {}, {}, {}, {}, {}
   local function refuse(kind)
     if kind == 'review' then
@@ -210,7 +226,8 @@ function P.draw(V, view, data, opts, groups)
   local reason = data.details and data.details.reason
   local path_rows = 1 + (data.query ~= nil and 1 or 0) + (information.title and border == 0 and 1 or 0)
     + (data.input and data.label and 1 or 0)
-  for _, text in ipairs({ data.required_label or false, data.target and 'Target: ' .. data.target or false }) do
+  for _, text in ipairs({ data.required_label or false, data.target and 'Target: ' .. data.target or false,
+    data.required_notice or false }) do
     if text then path_rows = path_rows + (wrapped_rows(V, text, width, body_height) or body_height + 1) end
   end
   local metadata_rows = (show_details and 2 or 0) + (data.details and (reason or show_details) and not repeated_reason and 1 or 0)
@@ -230,6 +247,7 @@ function P.draw(V, view, data, opts, groups)
   if information.title and border == 0 then line({ { data.title or 'Commands', groups.accent } }, 1) end
   line({ { path, groups.accent }, { information.details and not data.input and not data.required_label and data.label and '   ' .. data.label or '', groups.muted } }, 4)
   if data.required_label then required_line(data.required_label, groups.muted, 3, nil, 'facts') end
+  if data.required_notice then required_line(data.required_notice, groups.warning, 3, nil, 'facts') end
   if data.input and data.label then
     required_line(data.label, groups.muted, 3, nil, review and 'review' or 'input')
   end
@@ -331,7 +349,7 @@ function P.draw(V, view, data, opts, groups)
   if density == 'minimal' then
     local used = 1
     for _, text in ipairs(lines) do used = math.max(used, V.width(text)) end
-    width = math.min(width, used)
+    if not opts._fixed_panel then width = math.min(width, used) end
   end
   for index, text in ipairs(lines) do lines[index] = string.rep(' ', padding) .. text .. string.rep(' ', padding) end
   for _, mark in ipairs(marks) do mark[1], mark[2], mark[3] = mark[1] + vertical, mark[2] + padding, mark[3] + padding end
@@ -359,6 +377,8 @@ function P.draw(V, view, data, opts, groups)
     config.title = V.clip(data.title or 'Commands', math.max(0, width - V.width(suffix))) .. suffix
     config.title_pos = 'left'
   end
+  local Panels = require('command_tree.view.panels')
+  Panels.main(view, lines, config, opts)
   V.window(view, lines, config)
   vim.wo[view.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
     .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal
@@ -368,6 +388,7 @@ function P.draw(V, view, data, opts, groups)
       vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
     end
   end
+  Panels.draw(V, view, data, opts, groups)
   vim.cmd.redraw()
   return data.page, pages
 end

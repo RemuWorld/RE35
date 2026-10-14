@@ -2,6 +2,7 @@
 -- Runtime services are received through the prepared recipe manager.
 local K, V = require('command_tree.keys'), require('command_tree.view')
 local M = {}
+local Lists = require('command_tree.list_navigation')
 local function copy(value) return vim.deepcopy(value) end
 local Status = require('command_tree.project.recipe_status')
 local function displayed(data,id)
@@ -173,8 +174,8 @@ function M.definition(manager)
     return false,'No project action selected'
   end
   local actions={execute={label='Select / review',run=activate},refresh={label='Refresh',run=function(frame,ctx)rows(frame,ctx);frame.data.message=nil end}}
-  for id,delta in pairs({next=1,previous=-1,page_down=6,page_up=-6})do actions[id]={label=id:gsub('_',' '),hidden=true,control=id,run=function(frame,ctx)
-    local items,selected=rows(frame,ctx);frame.data.selected=math.max(1,math.min(#items,selected+delta));frame.data.selected_id=items[frame.data.selected] and items[frame.data.selected].id
+  for id,delta in pairs({next=1,previous=-1,page_down=6,page_up=-6})do actions[id]={label=id:gsub('_',' '),hidden=true,control=id,run=function(frame,ctx,_,opts)
+    local items,selected=rows(frame,ctx);frame.data.selected=Lists.move(selected,#items,delta,opts and opts.navigation);frame.data.selected_id=items[frame.data.selected] and items[frame.data.selected].id
     frame.data.invalidated_task_selection,frame.data.message=nil,nil
   end}end
   for _,id in ipairs({'run.build_and_run','run.tasks'})do actions['command:'..id]={label=id,run=function(_,ctx,session)return session.workspace_execute(id,nil,ctx)end}end

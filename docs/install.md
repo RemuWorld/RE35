@@ -1,15 +1,15 @@
 # Install RE35
 
-RE35 requires Neovim 0.11 or newer on Windows or Linux. A compiler, .NET SDK,
-language server or another plugin is not required for the Neovim environment.
-Optional integrations have their own prerequisites.
+This guide installs RE35's Neovim host, which requires Neovim 0.11 or newer on
+Windows or Linux. A compiler, .NET SDK, language server or another plugin is
+not required. Optional integrations have their own prerequisites; the
+[VS Code development host](../hosts/vscode/README.md) has a separate setup.
 
 ## Choose a source revision
 
 The public repository is [RemuWorld/RE35](https://github.com/RemuWorld/RE35).
-This checkout identifies itself as `0.1.0`, the initial public development
-release. Pin `v0.1.0` to install this release. Use `main` only to follow ongoing
-development.
+Pin a version tag such as `v0.2.0` to install that version.
+Use `main` only to follow ongoing development.
 
 Install the complete source layout from one revision. Check its runtime version
 and read the documentation shipped with it. A newer `main` revision can have
@@ -21,14 +21,14 @@ and known limitations.
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.1.0",
+  tag = "v0.2.0",
   config = function()
     require("re35").setup()
   end,
 }
 ```
 
-To follow development, replace `tag = "v0.1.0"` with `branch = "main"`.
+To follow development, replace `tag = "v0.2.0"` with `branch = "main"`.
 Use the plugin manager's normal install/update commands. Inspect any lockfile or
 configured revision before expecting an update.
 
@@ -45,10 +45,10 @@ re35_data_root="${XDG_DATA_HOME:-$HOME/.local/share}"
 re35_app_name="${NVIM_APPNAME:-nvim}"
 re35_parent="$re35_data_root/$re35_app_name/site/pack/re35/start"
 mkdir -p "$re35_parent"
-git clone --branch v0.1.0 https://github.com/RemuWorld/RE35.git "$re35_parent/RE35"
+git clone --branch v0.2.0 https://github.com/RemuWorld/RE35.git "$re35_parent/RE35"
 ```
 
-To follow development, use `--branch main` instead of `--branch v0.1.0`.
+To follow development, use `--branch main` instead of `--branch v0.2.0`.
 If the destination already exists, inspect it and update the intended checkout.
 
 ## Manual install on Windows or another layout
@@ -59,7 +59,7 @@ Inside Neovim, find the active data directory:
 :lua print(vim.fn.stdpath('data'))
 ```
 
-Clone or place the complete repository from tag `v0.1.0` at
+Clone or place the complete repository from tag `v0.2.0` at
 `site/pack/re35/start/RE35` below that directory. Keep `lua/re35.lua`,
 `lua/command_tree`, `lua/command_environment` and the accompanying files from
 the same revision.
@@ -80,8 +80,9 @@ runtime directory and uses your existing Neovim configuration.
 :lua print(debug.getinfo(require('re35').setup, 'S').source)
 ```
 
-The initial release should report `0.1.0`; the source path should be inside the
-intended installation. Remove an older duplicate runtimepath entry if it shadows
+Tag `v0.2.0` should report `0.2.0`. The reported version should match your chosen tag.
+The source path should be inside the intended installation. Remove an older
+duplicate runtimepath entry if it shadows
 that source. `require('command_tree')` is the same compatible API object, so an
 existing configuration using that name can keep it.
 
@@ -109,8 +110,9 @@ The archive contains one top-level `RE35` directory. Extract it below
 `site/pack/re35/start/` so that the resulting layout is
 `site/pack/re35/start/RE35/lua/re35.lua`. Use a new destination and preserve an
 existing installation before replacing it. Avoid an extra `RE35/RE35` level.
-Then use the setup and source checks above. Package preparation records bytes;
-an archive hash verifies source bytes rather than runtime behavior.
+Then use the setup and source checks above. Check the
+[compatibility](compatibility.md) for host requirements and limits;
+an archive hash verifies the source bytes, not runtime behavior.
 
 ## Optional hosts and native integration
 

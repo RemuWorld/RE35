@@ -3,6 +3,7 @@
 local V = require("command_tree.view")
 local Report = require("command_tree.task_report")
 local M = {}
+local Lists = require('command_tree.list_navigation')
 local function failure(value) return tostring(value):gsub("^.-:%d+:%s*", "") end
 local function discard_report(frame)
   if frame.data.report_preview then Report.discard(frame.data.report_preview) end
@@ -110,6 +111,11 @@ local function export_report(frame, ctx, session, records)
   local operation = find(records, frame.data.report_id)
   if not operation then return false, 'Reported task is no longer in retained history' end
   if frame.data.report_destination then
+    local complete, reason = V.presentation_review_status({
+      required_label = 'Task #' .. frame.data.report_id .. ' report · ' .. preview.byte_count .. ' bytes',
+      target = 'Report destination: ' .. frame.data.report_destination }, frame.view.presentation_options or (frame.data.options or {}).window or {})
+    if not complete then return false, reason end
+    if frame.view.presentation_facts_complete == false then return false, frame.view.presentation_facts_reason end
     local ok, why = Report.export(preview, operation, frame.data.report_destination)
     if not ok then return false, why end
     discard_report(frame)
@@ -264,6 +270,7 @@ local function render(frame, session, opts, records)
   local cancel_key = (opts.action_keys or {}).cancel or "x"
   V.draw(frame.view, { title = vim.trim(opts.title or "Tasks"), path = opts.path, label = label,
     required_label = (frame.data.detail_id or frame.data.report_preview) and label or nil,
+    target = frame.data.report_destination and ('Report destination: ' .. frame.data.report_destination) or nil,
     items = items, selected = selected, empty = frame.data.detail_id and "Esc returns to tasks" or "No tasks yet",
     message = frame.data.message or session.message, help = help,
     minimal_help = frame.data.report_preview and help or frame.data.detail_id and "Esc List · " .. cancel_key .. " Cancel · " .. view_key .. " View"
@@ -326,7 +333,7 @@ function M.definition()
       render(frame, session, opts, records)
       start(frame, session)
     end,
-    handle = function(frame, key, _, session)
+    handle = function(frame, key, _, session, opts)
       local records = operations(frame)
       local detail = frame.data.detail_id ~= nil
       local delta = ({ j = 1, k = -1, ["<Down>"] = 1, ["<Up>"] = -1,
@@ -347,7 +354,7 @@ function M.definition()
         frame.data.message = nil
         if detail then frame.data.detail_row = math.max(1, (frame.data.detail_row or 1) + delta)
         else
-          frame.data.selected = math.max(1, math.min(#records, (frame.data.selected or 1) + delta))
+          frame.data.selected = Lists.move(frame.data.selected, #records, delta, opts and opts.navigation)
           frame.data.selected_id = records[frame.data.selected] and records[frame.data.selected].id or nil
         end
       elseif key == "<CR>" and not detail then

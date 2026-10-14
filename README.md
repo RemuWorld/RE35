@@ -9,7 +9,7 @@ workflow semantics. Hosts connect those definitions to their UI, editor services
 and tools. Portable profiles carry user declarations; supported operations and
 live task history depend on the host.
 
-**Version 0.1.0.** Neovim is the primary host.
+**Version 0.2.0.** Neovim is the primary host.
 The optional VS Code desktop development host supports a defined subset of
 document and project workflows. See [command coverage](docs/command-coverage.md)
 and [compatibility](docs/compatibility.md) for supported scope and limitations.
@@ -28,14 +28,17 @@ Press `\` to open RE35; ordinary Normal-mode keys remain available before entry.
 - Edit portable profiles, custom commands and workspace bindings.
 - Create, edit and share appearance presets, including Full, Compact and Minimal views.
 
+0.2.0 adds remembered themes, consistent list navigation, clearer
+storage/error feedback and a stable command panel with separate details.
+
 ## Install
 
-With lazy.nvim, pin the public release tag:
+With lazy.nvim, pin the version you want to use:
 
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.1.0",
+  tag = "v0.2.0",
   config = function()
     require("re35").setup()
   end,
@@ -59,6 +62,7 @@ After opening RE35 with `\`:
 | `h` | Open History |
 | `m` | Choose a workspace |
 | `s` | Open Settings |
+| `s g` / `s v` | Getting started / integration diagnostics |
 | `↑` / `↓` | Select a tree item |
 | Enter / `→` | Enter the selected item |
 | Esc / Backspace / `←` | Go back |
@@ -67,6 +71,10 @@ After opening RE35 with `\`:
 Text fields retain their editing keys. Tab offers completion and F1 changes
 density. Ctrl-h opens a command's details; `s` there shows status and `r`
 rechecks requirements.
+Ctrl-h also inspects preview errors without losing an input. Shift-PageUp and
+Shift-PageDown scroll the independent details panel. Select Editor in Workspaces
+to return to native editing. See [configuration](docs/configuration.md) for theme
+persistence, list wrapping and panel options available since 0.2.0.
 
 ## Other integrations
 
@@ -87,7 +95,7 @@ optional C ABI. C++ and C# console examples demonstrate the integration boundary
 | [Neovim help](doc/command-environment.txt) / [Integrations](doc/command-environment-integrations.txt) | Keys, workspaces and optional adapters |
 | [File search](docs/file-search.md) / [Recipes](docs/project-recipes.md) / [Recovery](docs/recovery-workflow.md) | Find, run and retry work |
 | [UI settings](docs/ui-settings.md) / [Presentation presets](docs/presentation-presets.md) | Customize and share appearance |
-| [Documentation index](docs/README.md) | User guides and integration contracts |
+| [Documentation index](docs/README.md) | User guides, architecture and integration contracts |
 | [Changelog](CHANGELOG.md) / [Roadmap](docs/roadmap.md) / [Contributing](CONTRIBUTING.md) | Release scope and future work |
 
 Licensed under [Apache License 2.0](LICENSE).

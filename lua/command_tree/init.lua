@@ -3,7 +3,7 @@ if vim.fn.has("nvim-0.11") ~= 1 then
 end
 local K = require("command_tree.keys")
 local Entry, Profile = require("command_tree.entry"), require("command_tree.profile")
-local M = { version = "0.1.0" }
+local M = { version = "0.2.0" }
 local Lifecycle = require("command_tree.environment.lifecycle")
 local Builder, Options = require("command_tree.environment.builder"), require("command_tree.environment.options")
 local lifecycle = Lifecycle.new(M)
@@ -13,7 +13,17 @@ local function get() if not lifecycle:current() then M.setup() end; return lifec
 function M.open(opts)
   local ok, err = lifecycle:admit()
   if not ok then return nil, err end
-  return get().session:open(opts)
+  local env = get()
+  opts = vim.tbl_extend('force', {}, opts or {})
+  local on_open = opts.on_open
+  opts.on_open = function(state)
+    if on_open then
+      assert(type(on_open) == 'function', 'on_open must be a function')
+      on_open(state)
+    end
+    if env.session.active == state then require('command_tree.guidance').offer(state, env.options) end
+  end
+  return env.session:open(opts)
 end
 function M.close()
   local ok, err = lifecycle:admit()
@@ -140,10 +150,15 @@ function M.set_slot(slot, id)
 end
 function M.slots() return get().usage:slots() end
 function M.persistence_status()
+  return require('command_tree.persistence').snapshot(get())
+end
+function M.integration_status(ctx)
   local env = get()
-  return { usage = { load_error = env.usage.load_error, save_error = env.usage.save_error, path = env.usage.path },
-    preferences = { load_error = env.preferences.load_error, save_error = env.preferences.save_error, path = env.preferences.path },
-    profile = { load_error = env.profile_error, save_error = env.profile_save_error, path = env.profile_path } }
+  local safe, result = lifecycle:with_lock('integration status', function()
+    return require('command_tree.guidance').report(env, ctx or K.context())
+  end)
+  if not safe then return nil, result end
+  return result
 end
 function M.register(spec)
   lifecycle:assert_mutable()

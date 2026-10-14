@@ -7,10 +7,12 @@ function M.new(lifecycle)
   local function prepare(opts) return lifecycle:prepare(opts) end
   local function commit(candidate, saved)
     local previous = get()
+    if saved then candidate.profile_state = 'saved' end
     local ok, err = lifecycle:activate(candidate)
     if not ok and saved then
       previous.disk_profile = vim.deepcopy(candidate.disk_profile)
       previous.requires_profile_reload = true
+      previous.profile_state = 'saved_not_active'
       previous.profile_save_error = 'Profile saved, but host activation failed: ' .. tostring(err)
       return false, previous.profile_save_error .. '; reload the saved profile before editing settings again'
     end
@@ -92,7 +94,11 @@ function M.new(lifecycle)
         assert(vim.deep_equal(disk, expected or env.disk_profile), "Profile changed in another editor; review the import again before applying")
         return preview.profile
       end)
-      if not ok then prepared.extensions:dispose(); return false, err end
+      if not ok then
+        env.profile_save_error = err
+        prepared.extensions:dispose()
+        return false, err
+      end
     end
     prepared.disk_profile = vim.deepcopy(preview.profile)
     local active, activation_error = commit(prepared, env.profile_path ~= false)
@@ -159,7 +165,11 @@ function M.new(lifecycle)
       local safe, result = pcall(change, env.profile)
       ok, err, data = safe, not safe and tostring(result) or nil, safe and result or nil
     end
-    if not ok then if prepared then prepared.extensions:dispose() end; return false, err end
+    if not ok then
+      if env.profile_path then env.profile_save_error = err end
+      if prepared then prepared.extensions:dispose() end
+      return false, err
+    end
     prepared.disk_profile = vim.deepcopy(data)
     local active, activation_error = commit(prepared, env.profile_path ~= false)
     if not active then return false, activation_error end

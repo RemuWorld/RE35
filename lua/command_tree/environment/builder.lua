@@ -56,6 +56,10 @@ local function prepare_environment(opts, pending)
   if profile.adapters.picker == "telescope" and not options.integrations.picker then
     options.integrations.picker = require("command_tree.integrations.telescope").new()
   end
+  if options.integrations.theme == nil then
+    options.integrations.theme = require("command_tree.integrations.themes").new(options.theme)
+    require('command_tree.integrations.theme_startup').own(options.integrations.theme)
+  end
   require("command_tree.integrations").resolve(options.integrations)
   local seen = {}
   local fixed = { ["<Esc>"] = true, ["<BS>"] = true, ["<C-c>"] = true, ["<C-d>"] = true, ["<C-u>"] = true, ["<F1>"] = true }
@@ -70,7 +74,7 @@ local function prepare_environment(opts, pending)
   local registry, usage = require("command_tree.registry").new(), require("command_tree.usage").new(options.usage)
   local reserved = { global = {}, root = {} }
   for _, key in ipairs({ "<Esc>", "<BS>", "<C-c>", "<C-d>", "<C-u>", "<F1>" }) do reserved.global[key] = true end
-  for _, name in ipairs({ "close", "execute", "search", "detail", "workspaces", "recent", "favorites", "words", "inspect" }) do
+  for _, name in ipairs({ "close", "execute", "search", "detail", "workspaces", "recent", "favorites", "words", "inspect", "details_down", "details_up" }) do
     local action = ({ detail = "density" })[name] or name
     reserved.global[options.keys[name]] = (name == "close" or name == "execute") and true or { session_action = action }
   end
@@ -80,6 +84,16 @@ local function prepare_environment(opts, pending)
   local workspaces = require("command_tree.workspaces").new()
   local env = { options = options, setup_opts = vim.deepcopy(opts), registry = registry, usage = usage, preferences = preferences, workspaces = workspaces,
     profile = profile, profile_path = profile_path, profile_error = profile_error, disk_profile = disk_profile or Profile.empty() }
+  -- Profile transactions retain the adapter's storage/preview ownership. They
+  -- must not create a fresh theme restore on every Settings Apply or Reload.
+  if type(options.integrations.theme) == 'table' and options.integrations.theme.builtin then
+    env.setup_opts.integrations = env.setup_opts.integrations or {}
+    env.setup_opts.integrations.theme = options.integrations.theme
+  end
+  env.profile_state = profile_path == false and 'session_only' or profile_error and 'load_failed'
+    or disk_profile and vim.uv.fs_stat(profile_path) and vim.deep_equal(profile, disk_profile) and 'saved' or 'local_defaults'
+  workspaces:register({ id = 'editor', name = 'Editor', icon = '▤', order = 1000, destination = 'editor' })
+  workspaces:register(require('command_tree.guidance').definition())
   env.executor = require("command_tree.executor").new(registry, usage)
   require("command_tree.defaults").register(registry, options)
   require("command_tree.file_search").register(env)
@@ -89,6 +103,7 @@ local function prepare_environment(opts, pending)
   end
   for _, spec in ipairs(options.workspaces.definitions) do register_workspace(env, spec) end
   require("command_tree.settings").register(registry, options)
+  require("command_tree.guidance").register(registry, options)
   require("command_tree.customize").register(registry, options)
   require("command_tree.project").register(registry, profile.tools, options.tool_overrides, options.process_helper)
   if next(profile.projects or {}) or next(profile.recipes or {}) then
@@ -195,7 +210,10 @@ local function prepare_environment(opts, pending)
       local safe, result = pcall(mutate, env.profile)
       ok, err, next_profile = safe, not safe and tostring(result) or nil, safe and result or nil
     end
-    if ok then env.profile, env.disk_profile = next_profile, vim.deepcopy(next_profile) end
+    if ok then
+      env.profile, env.disk_profile = next_profile, vim.deepcopy(next_profile)
+      env.profile_state = env.profile_path and 'saved' or 'session_only'
+    end
     env.profile_save_error = err
     return ok, err, ok and vim.deepcopy(next_profile[field]) or nil
   end

@@ -355,7 +355,7 @@ CE.close(); vim.api.nvim_buf_set_lines(source, 0, -1, true, editing_source)
 untouched('option boundary refusal')
 
 H.ok(CE.execute('replace-literal', { find = 'final', replace = 'renamed refusal' }, { interactive = false }))
-keys('<Down>')
+if require('command_tree.arguments').value(session.active.input.choices[session.active.input.selected]) ~= true then keys('<Down>') end
 H.eq('input', session.active.mode)
 local rename_count, rename_lines, rename_tick = #CE.operations(), text(), vim.api.nvim_buf_get_changedtick(source)
 vim.api.nvim_buf_set_name(source, folder .. '/rename during replace.txt')
@@ -382,7 +382,7 @@ H.ok(reason:find('Undo is disabled', 1, true), 'inherited disabled undo refuses 
 H.eq(rename_lines, text())
 CE.close(); vim.go.undolevels, vim.bo[source].undolevels = undo_global, undo_local
 H.ok(CE.execute('replace-literal', { find = 'final', replace = 'undo disabled after preview' }, { interactive = false }))
-keys('<Down>')
+if require('command_tree.arguments').value(session.active.input.choices[session.active.input.selected]) ~= true then keys('<Down>') end
 H.eq('input', session.active.mode)
 vim.bo[source].undolevels = -1
 keys('<CR>')

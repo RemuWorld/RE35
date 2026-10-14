@@ -6,6 +6,13 @@ rendering, persistence, source identity and execution. Neovim uses them in proce
 the optional VS Code host uses the native transport. The portable Engine is a
 bounded request model rather than the complete Neovim Session.
 
+Shared profile declarations can describe logical projects, recipes, choices and
+presentation preferences. Executable paths, project mappings, live editor
+objects, authorization receipts and Task history belong to the host. Retaining
+a valid declaration does not make an unsupported operation available. The
+[architecture map](development/execution-structure.md) locates those boundaries;
+[command coverage](command-coverage.md) identifies the supported host features.
+
 The Lua 5.1 syntax is executable by LuaJIT. The native bridge requires the **Lua 5.1 C ABI** and an explicit compatible runtime library path. It dynamically loads the runtime and preloads the core sources declared in `native/core_modules.def`. CMake uses the same manifest for installation and rejects missing, duplicate or unlisted core sources. It does not ship a Lua runtime, load Neovim or duplicate command logic in C++. Neovim needs no native compiler or bridge binary.
 
 The source includes [Document v1/v2](host-contracts.md), portable profile and
@@ -45,4 +52,10 @@ duplicate claim and duplicate completion are rejected.
 
 The host owns actual handlers, dynamic choices, permission checks and external resources. Cancellation requests do not pretend that a process stopped. Complete once with actual success/failure/cancellation and any partial result. A closed UI keeps operation records; a disposed engine returns pending request IDs for the host to detach and rejects later completion. Detaching does not kill a host process.
 
-The C++ and C# samples resolve the same tree and alias and execute their own counter handler. They also exercise bad input, stale selection/target, exceptions, repeated completion, cancellation, thread rejection and disposal. This is console integration evidence. Game-engine UI, mobile/console platforms and per-frame budgets need tests in their actual hosts.
+The C++ and C# samples resolve the same tree and alias and execute their own
+counter handler. They include cases for bad input, stale selection/target,
+exceptions, repeated completion, cancellation, thread rejection and disposal.
+These are embedding examples, not additional editor hosts. They require their
+respective installed toolchains; see [compatibility](compatibility.md).
+Game-engine UI, mobile/console platforms and per-frame budgets require checks
+in their actual hosts.

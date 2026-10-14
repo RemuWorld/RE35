@@ -51,8 +51,10 @@ function M.attach(self, dispatch_submission)
     if input.callback then
       if type(input.preview) == "function" then
         local ok, cleanup = pcall(vim.api.nvim_win_call, ctx.win, function() return input.preview(field_value(input), ctx) end)
-        if ok and type(cleanup) == "function" then state.preview_cleanup = cleanup
-        elseif not ok then state.message = "Preview: " .. tostring(cleanup):match("[^\n]+") end
+        if ok then
+          self:clear_feedback('Preview')
+          if type(cleanup) == 'function' then state.preview_cleanup = cleanup end
+        else self:record_feedback('Preview', cleanup, command) end
       end
       return
     end
@@ -61,8 +63,10 @@ function M.attach(self, dispatch_submission)
     local field = command.arguments[input.index]
     args[field.name] = field_value(input)
     local ok, cleanup = pcall(vim.api.nvim_win_call, ctx.win, function() return command.preview(ctx, args) end)
-    if ok and type(cleanup) == "function" then state.preview_cleanup = cleanup
-    elseif not ok then state.message = "Preview: " .. tostring(cleanup):match("[^\n]+") end
+    if ok then
+      self:clear_feedback('Preview')
+      if type(cleanup) == 'function' then state.preview_cleanup = cleanup end
+    else self:record_feedback('Preview', cleanup, command) end
   end
 
   function self:input_field()
@@ -90,9 +94,15 @@ function M.attach(self, dispatch_submission)
 
   function self:filter_choices()
     local input = self.active.input
+    local selected = input.choices and input.choices[input.selected]
     local needle = vim.fn.tolower(input.filter or "")
     input.choices = vim.tbl_filter(function(item) return vim.fn.tolower(A.label(item)):find(needle, 1, true) ~= nil end, input.all_choices or {})
     input.selected = math.max(1, math.min(input.selected or 1, #input.choices))
+    if selected then
+      for index, item in ipairs(input.choices) do
+        if vim.deep_equal(A.value(item), A.value(selected)) then input.selected = index; break end
+      end
+    end
     self:preview_input()
   end
 
@@ -247,7 +257,7 @@ function M.attach(self, dispatch_submission)
       end)
       if not current() then return end
       if not target_unchanged() then state.message = "Completion target changed; reopen the command"; return end
-      if not ok then state.message = "Completion: " .. tostring(matches); return end
+      if not ok then self:record_feedback('Completion', matches, command); return end
       if type(matches) ~= "table" or not vim.islist(matches) then state.message = "Completion must return an array"; return end
       if #matches == 0 then state.message = "No completions"; return end
       for _, match in ipairs(matches) do if type(match) ~= "string" then state.message = "Completion choices must be text"; return end end
@@ -276,7 +286,8 @@ function M.attach(self, dispatch_submission)
       if not current() then return end
       if not target_unchanged() then input.completion, state.message = nil, "Completion target changed; reopen the command"; return end
       if not ok or valid ~= true then
-        input.completion, state.message = nil, "Completion: " .. tostring(ok and (why or "Command is no longer available") or valid)
+        input.completion = nil
+        self:record_feedback('Completion', ok and (why or "Command is no longer available") or valid, command)
         return
       end
     end

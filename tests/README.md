@@ -58,6 +58,10 @@ interaction checks or performance measurements used for a release.
 
 | Current fixture | Checks |
 | --- | --- |
+| `test_theme_persistence.lua` / `test_theme_startup.lua` | Actual save/rollback failures, strict host-local state, confirmed theme restoration across fresh editor processes, custom ownership and disabled/stale startup hooks |
+| `test_navigation_feedback.lua` | Shared list wrapping, option-off clamping, full error inspection/return, restoration failure refusal, independent detail scrolling and native Editor return |
+| `test_fixed_panels.lua` | Stable main geometry, independent bounded details, legacy/preset and three-density behavior, tiny critical-scene refusal and complete window cleanup |
+| `test_guidance_persistence.lua` | Read-only integration status, native first-use routes, truthful Draft/Saved/Session only and actual profile/theme save failures |
 | `test_presentation_contract.lua` | Editor-independent preset schema, inheritance/standalone roots, six scenes, capability/fallback, strict data and size bounds |
 | `test_presentation_edit.lua` | Shared authoring schema, independent clones, bounded mutations and appearance-file codec parity; no command execution authority |
 | `test_presentation_inspection.lua` | Fixed 24-case renderer projections, bounded geometry/state, tiny input/review refusal and separate History edges; physical judgment remains unjudged |

@@ -1,5 +1,10 @@
 # Share UI settings
 
+Neovim's fixed-panel layout, details height, navigation wrapping and theme
+storage are local setup options described in [configuration](configuration.md).
+They do not add fields to the existing eight-value export below. Native VS Code
+controls keep their host-owned geometry and capability reports.
+
 ## Export
 
 Open Settings > UI > Export UI settings, enter a new `.json` filename inside an

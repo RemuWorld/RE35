@@ -265,7 +265,13 @@ H.ok(table.concat(vim.api.nvim_buf_get_lines(frame.view.buf, 0, -1, false), '\n'
 local before = #CE.operations()
 key('o'); H.eq(true, frame.data.report_preview.include_output, 'output requires explicit opt-in with a new preview')
 local seen = {}
-local function rendered_report() return table.concat(vim.api.nvim_buf_get_lines(frame.view.buf, 0, -1, false), '\n') end
+local function rendered_report()
+  local lines = vim.api.nvim_buf_get_lines(frame.view.buf, 0, -1, false)
+  if frame.view.details and vim.api.nvim_buf_is_valid(frame.view.details.buf) then
+    vim.list_extend(lines, vim.api.nvim_buf_get_lines(frame.view.details.buf, 0, -1, false))
+  end
+  return table.concat(lines, '\n')
+end
 for _, density in ipairs({ 'full', 'compact', 'minimal' }) do
   state.density, frame.data.report_row = density, 1
   real_session:draw()
@@ -285,9 +291,17 @@ key('<CR>'); H.eq('input', state.mode, 'Enter asks a destination through CE inpu
 state.input.text = folder .. '/ui-report.json'; state.input.cursor = vim.fn.strchars(state.input.text)
 key('<CR>'); H.eq('workspace', state.mode, 'destination acceptance returns to report preview')
 H.ok(frame.data.report_destination, 'destination is displayed for review')
-H.ok(table.concat(vim.api.nvim_buf_get_lines(frame.view.buf, 0, -1, false), '\n'):find('Destination reviewed', 1, true),
+H.ok(rendered_report():find('Destination reviewed', 1, true),
   'reviewed destination is visible in the actual Tasks window')
 H.ok(not vim.uv.fs_stat(folder .. '/ui-report.json'), 'choosing destination does not write')
+local report_columns, report_lines = vim.o.columns, vim.o.lines
+vim.o.columns, vim.o.lines = 12, 7
+real_session:draw()
+key('<CR>')
+H.ok(not vim.uv.fs_stat(folder .. '/ui-report.json'), 'A clipped destination cannot authorize report publication')
+H.ok(frame.data.report_destination and frame.data.report_preview, 'Refused publication preserves its reviewed destination and preview')
+vim.o.columns, vim.o.lines = report_columns, report_lines
+real_session:draw()
 key('<CR>'); H.ok(vim.uv.fs_stat(folder .. '/ui-report.json'), 'second explicit Enter saves exact report')
 H.eq(nil, frame.data.report_preview, 'saved report returns to original task details')
 H.eq(2, frame.data.detail_id, 'export preserves owned task')

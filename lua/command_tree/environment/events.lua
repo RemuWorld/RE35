@@ -57,5 +57,8 @@ function M.install(env, api, current)
   vim.api.nvim_create_user_command("CommandTreeKeys", function(cmd) api.show({ keys = cmd.args }) end,
     { nargs = "?", desc = "Show keymaps", force = true })
   env.providers:refresh(vim.api.nvim_get_current_buf(), true)
+  local token = api.environment_token()
+  require('command_tree.integrations.theme_startup').activate(env, current, group,
+    function() return api.is_current_environment(token) end)
 end
 return M

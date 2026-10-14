@@ -1,10 +1,13 @@
 # Project recipes
 
-This guide describes creating, running and retrying recipes in Neovim. The
-portable declarations are also used by the optional VS Code host; its
+Recipes join ordered tool invocations, their results and original-task retry.
+Define a workflow once, then supply the executable paths and project roots on
+each machine. This guide describes creating, running and retrying recipes in
+Neovim. The portable declarations are also used by the optional VS Code host; its
 [recipe controls](../hosts/vscode/README.md#run-a-recipe) use native command and
-selection surfaces. The hosts share recipe identities and original-task choices,
-not every Settings screen or workspace binding.
+selection surfaces. Recipe IDs and declared choices use the same model; live
+Tasks and Results stay with the host that created them. Not every Settings
+screen or workspace binding is supported in both hosts.
 
 Project recipes use optional schema-1 profile maps. Reading/importing the data never loads repository Lua or starts a program.
 
@@ -146,8 +149,7 @@ the retained task, not part of portable profiles or imported data.
 Use the [RE35 development profile](development/self-development.md) to run this
 repository's tests and native build through the same workflow.
 
-Maintainer contracts and registration order are in
-[workflow integration](development/execution-structure.md); host-specific
-Results and retry details are in the
+Follow [recipe recovery](recovery-workflow.md) for the failure → source repair →
+original-task retry flow. Host-specific Results and retry details are in the
 [VS Code recovery guide](../hosts/vscode/README.md#recover-the-original-task).
 See [compatibility](compatibility.md) for host scope and limitations.

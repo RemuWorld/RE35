@@ -122,6 +122,9 @@ end
 
 local function completion(self, state, command, ctx, done, origin)
   return function(ok, detail, operation)
+    local warning = type(detail) == 'table' and type(rawget(detail, 'warning')) == 'string' and rawget(detail, 'warning') or nil
+    local persistence = type(detail) == 'table' and type(rawget(detail, 'persistence')) == 'table' and rawget(detail, 'persistence') or nil
+    local notice = persistence and ((command.name or command.id) .. ' · ' .. require('command_tree.persistence').label(persistence))
     state.busy = false
     if ok then
       self.drafts:forget(command.id, ctx.buf)
@@ -132,9 +135,19 @@ local function completion(self, state, command, ctx, done, origin)
         and origin.navigation == (state.navigation or 0) then
         state.input = nil
         self:pop_mode(true)
-        state.message = (command.name or command.id) .. ' completed'
+        state.message = warning or notice or (command.name or command.id) .. ' completed'
+        if warning then self:record_feedback('Storage', warning, command) end
         self:draw()
-      elseif ok and origin.mode ~= 'workspace' and origin.navigation == (state.navigation or 0) then self:close()
+      elseif ok and warning then
+        if origin.input and state.input == origin.input and origin.navigation == (state.navigation or 0) then
+          state.input = nil
+          self:pop_mode(true)
+        end
+        self:record_feedback('Storage', warning, command)
+        self:draw()
+      elseif ok and origin.mode ~= 'workspace' and origin.navigation == (state.navigation or 0) then
+        self:close()
+        if notice and #vim.api.nvim_list_uis() > 0 then vim.notify(notice, vim.log.levels.INFO, { title = 'RE35' }) end
       elseif ok then state.message = (command.name or command.id) .. ' completed; results are available in Tasks'; self:draw()
       else
         state.message = failure_message(detail)

@@ -5,9 +5,25 @@ local V = require('command_tree.view')
 local A = require('command_tree.arguments')
 local Text = require('command_tree.text')
 local Guide = require('command_tree.session.key_guide')
+local Feedback = require('command_tree.session.feedback')
 local has_children, guide_owns_key, path_label = Guide.has_children, Guide.owns_key, Guide.path_label
 local function copy_path(path) return vim.deepcopy(path or {}) end
 local M = {}
+local function diagnostic_rows(record, width)
+  local items = {}
+  for _, line in ipairs(record.lines or {}) do
+    local chunk, occupied = '', 0
+    for char in line:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+      local size = vim.fn.strdisplaywidth(char)
+      if occupied + size > width and chunk ~= '' then
+        items[#items + 1] = { key = '', name = chunk }; chunk, occupied = '', 0
+      end
+      chunk, occupied = chunk .. char, occupied + size
+    end
+    items[#items + 1] = { key = '', name = chunk }
+  end
+  return items
+end
 
 function M.attach(self)
   function self:command_details(command, enabled, reason, context)
@@ -32,7 +48,7 @@ function M.attach(self)
     end
     local opts = vim.tbl_extend("force", {}, self.options.window, { density = state.density })
     local data = { title = "Commands", path = self.options.open_key .. " " .. path_label(state.path),
-      label = "Commands", items = {}, message = state.message, page = state.page,
+      label = "Commands", items = {}, message = state.message, page = state.page, diagnostic = Feedback.current(state),
       help = "Esc Back  ·  " .. K.label(self.options.keys.search) .. " Search  ·  " .. K.label(self.options.keys.detail) .. " View  ·  " .. self.options.open_key .. " Close" }
     if state.mode == "search" or state.mode == "words" then
       local words = state.mode == "words"
@@ -94,6 +110,16 @@ function M.attach(self)
           data.items[#data.items + 1] = { key = "Query", name = state.recovered_query }
         end
       else data.message = "Command is no longer registered; its saved reference is preserved" end
+    elseif state.mode == 'feedback' then
+      local record = state.feedback_inspection or {}
+      data.title, data.label, data.input = 'Diagnostic details', record.phase or 'Diagnostic', true
+      data.path = self.options.open_key .. ' › Diagnostic'
+      data.diagnostic, data.message = record, nil
+      data.items = { { key = 'Phase', name = record.phase or 'Unknown' } }
+      if record.command_id then data.items[#data.items + 1] = { key = 'Command', name = record.command_id } end
+      if record.provider then data.items[#data.items + 1] = { key = 'Provider', name = record.provider } end
+      if record.field then data.items[#data.items + 1] = { key = 'Field', name = record.field } end
+      data.help = '↑/↓ Scroll message  ·  Ctrl-d/u Page  ·  Esc Back to form'
     elseif state.mode == "availability" then
       local report = state.availability_report or {}
       data.title, data.label, data.input = "Command status", report.title or "Status", true
@@ -140,6 +166,7 @@ function M.attach(self)
       data.help = input.choices and (field.kind == "multiselect" and "Space Toggle  ·  Enter Accept  ·  / Filter  ·  Esc Back" or "Enter Select  ·  / Filter  ·  F1 View  ·  Esc Back")
         or ("Enter Next / Run  ·  Tab Complete  ·  ↑/↓ History  ·  Esc Back")
       if not field.required and not input.callback then data.help = data.help .. "  ·  Ctrl-s Skip" end
+      if data.diagnostic then data.help = data.help .. '  ·  ' .. K.label(self.options.keys.inspect or '<C-h>') .. ' Inspect error' end
     else
       local node = state.mode == "keymaps" and Maps.node(state.keymap_root, state.path) or self.registry:node(state.path)
       if not node then state.message = "Path is no longer registered"; return end
@@ -223,7 +250,19 @@ function M.attach(self)
     end
     local scene = ({ search = 'search', words = 'search', selector = 'tree', input = 'input', review = 'review' })[state.mode] or 'tree'
     opts = require('command_tree.presentation').options(self.options, state, scene, opts)
+    if data.details or data.diagnostic then data.help = data.help .. '  ·  Shift-PgUp/PgDn Details' end
     state.page, state.pages = V.draw(state.view, data, opts)
+    if state.mode == 'feedback' and not (state.view.details and state.view.details.win and vim.api.nvim_win_is_valid(state.view.details.win)) then
+      -- Dynamic opt-out and very small screens still expose the complete bounded
+      -- message as a paged list. Enter never invokes a diagnostic row.
+      local width = state.view.win and vim.api.nvim_win_get_width(state.view.win) or opts.width or 48
+      data.items = diagnostic_rows(state.feedback_inspection or {}, math.max(1, width - 8))
+      state.feedback_rows = #data.items
+      state.feedback_offset = math.max(1, math.min(#data.items, state.feedback_offset or 1))
+      data.selected = state.feedback_offset
+      data.diagnostic, data.message = nil, nil
+      state.page, state.pages = V.draw(state.view, data, opts)
+    end
   end
 
 end

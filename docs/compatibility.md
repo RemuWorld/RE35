@@ -1,14 +1,15 @@
 # Compatibility and limitations
 
-## RE35 0.1.0
+## RE35 0.2.0
 
 The primary Neovim host requires **Neovim 0.11 or newer** on Windows or Linux.
 It uses Lua source directly and does not require another plugin, a compiler or
 a language server to open the command environment. Optional commands require
 their configured tools or adapters; unavailable capabilities show a reason.
 
-Theme selection is session-only in the builtin adapter. Persistent themes
-require user configuration or a custom adapter in this version.
+Confirmed builtin theme choices persist by default; preview does not save.
+`theme.persist = false` opts out. Custom theme adapters own their storage and
+startup behavior. Existing profile and shared contract versions are unchanged.
 
 See [configuration](configuration.md) for saved-profile precedence and adapter
 setup, and [command coverage](command-coverage.md) for the implemented operations.

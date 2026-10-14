@@ -80,6 +80,15 @@ All roots start with center position, width 48, maximum width 88, maximum height
 16 and theme-inherited roles. These are root defaults, not a guarantee of the
 effective screen after legacy values, explicit overrides and viewport constraints.
 
+RE35 0.2.0's Neovim host uses `window.layout = 'fixed'` for an anchored main panel and
+an independently bounded details panel. This is host-owned geometry, not a new
+field or meaning in the shared preset contract. Mode/scene or viewport changes
+can resize the footprint; selection and optional descriptions cannot. Critical
+legacy input/review/source views use the same factory-model wrapping and
+admission rules as named presets. Separate details never hide required review
+targets, partial-result notices or task-report destinations. Native VS Code
+controls retain their existing capability/fallback reports.
+
 Resolve in this order:
 
 1. Select explicit requested ID, then configuration selection, then legacy
@@ -163,7 +172,7 @@ Protocol 1 / C ABI 1 expose these additive operations:
 Unknown request fields are refused. Bridge responses retain the existing
 bounded error envelope; semantic refusal does not admit work. The optional
 loader/source manifest now contains 17 modules including `presentation_edit`;
-older built loaders require replacement before checking this candidate.
+older built loaders require replacement before using the added operations.
 
 ## Capabilities and fallback
 

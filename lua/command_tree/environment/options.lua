@@ -3,10 +3,15 @@ local K = require('command_tree.keys')
 local M = {}
 local defaults = {
   delay = 200, auto = false, auto_modes = {}, operator_help = false, open_key = "\\",
-  keys = { execute = "<CR>", search = "/", detail = "?", workspaces = "<C-w>", recent = "<C-r>", favorites = "<C-b>", favorite = "<C-f>", words = "<C-l>", inspect = "<C-h>" },
+  keys = { execute = "<CR>", search = "/", detail = "?", workspaces = "<C-w>", recent = "<C-r>", favorites = "<C-b>", favorite = "<C-f>", words = "<C-l>", inspect = "<C-h>",
+    details_down = "<S-PageDown>", details_up = "<S-PageUp>" },
   providers = { builtin = true, lsp = true, plugins = true, runner = true, ex = true, keymaps = true, native = true },
   groups = { ["<leader>"] = "Leader", ["<leader>c"] = "Code", ["<leader>r"] = "Run / rename", ["<leader>u"] = "UI", ["<leader>b"] = "Buffers" },
-  window = { density = "full", width = 48, max_width = 88, max_height = 16, icons = true, position = "center" },
+  window = { density = "full", width = 48, max_width = 88, max_height = 16, icons = true, position = "center",
+    layout = "fixed", details = { enabled = true, max_height = 6 } },
+  navigation = { wrap = true },
+  theme = { persist = true },
+  guidance = { first_run = true },
   hints = { position = "bottom" },
   history = { position = "bottom-right", visible = true, width = 38, preview_max_lines = 10000, restore_lines = 6,
     timeline_stay_open = true },
@@ -29,7 +34,7 @@ local function validate_options(options)
   local function list(value, name)
     assert(type(value) == "table" and vim.islist(value), name .. " must be a list")
   end
-  for _, name in ipairs({ "keys", "providers", "groups", "window", "hints", "history", "workspaces", "usage", "preferences", "integrations" }) do
+  for _, name in ipairs({ "keys", "providers", "groups", "window", "hints", "history", "workspaces", "usage", "preferences", "integrations", "navigation", "theme", "guidance" }) do
     assert(type(options[name]) == "table", name .. " must be a table")
   end
   local modes = { n = true, v = true, x = true, s = true, o = true, i = true, l = true, c = true, t = true, [""] = true, ["!"] = true }
@@ -73,6 +78,17 @@ local function validate_options(options)
   end
   assert(type(options.history.visible) == "boolean", "history.visible must be a boolean")
   assert(type(options.history.timeline_stay_open) == "boolean", "history.timeline_stay_open must be a boolean")
+  assert(type(options.navigation.wrap) == "boolean", "navigation.wrap must be a boolean")
+  assert(type(options.theme.persist) == "boolean", "theme.persist must be a boolean")
+  assert(options.theme.path == nil or type(options.theme.path) == "string" and options.theme.path ~= ""
+    and not options.theme.path:find('[%z\r\n]'), "theme.path must be a nonempty local file path")
+  assert(type(options.guidance.first_run) == "boolean", "guidance.first_run must be a boolean")
+  assert(options.window.layout == "fixed" or options.window.layout == "dynamic", "window.layout must be fixed or dynamic")
+  assert(type(options.window.details) == "table", "window.details must be a table")
+  assert(type(options.window.details.enabled) == "boolean", "window.details.enabled must be a boolean")
+  local detail_height = options.window.details.max_height
+  assert(type(detail_height) == "number" and detail_height >= 1 and detail_height <= 64 and detail_height % 1 == 0,
+    "window.details.max_height must be an integer from 1 to 64")
   for _, scope in ipairs({ "window", "hints", "history" }) do
     local settings = options[scope]
     assert(type(settings) == "table", scope .. " must be a table")

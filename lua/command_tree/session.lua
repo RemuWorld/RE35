@@ -8,6 +8,8 @@ local Input = require('command_tree.session.input')
 local Presenter = require('command_tree.session.presenter')
 local Guide = require('command_tree.session.key_guide')
 local Dispatch = require('command_tree.session.dispatch')
+local Lists = require('command_tree.list_navigation')
+local Feedback = require('command_tree.session.feedback')
 local snapshot, restore = Navigation.snapshot, Navigation.restore
 local capture_settings_navigation, validate_settings_navigation = Navigation.capture_settings, Navigation.validate_settings
 local field_value = Input.value
@@ -58,12 +60,18 @@ function M.new(services)
 
   function self:clear_preview()
     local state = self.active
+    if state and state.preview_restore_failed then
+      local record = Feedback.current(state)
+      state.message = record and record.message or 'Preview restoration failed; close and reopen this command'
+      return false, state.message
+    end
     if state and state.preview_cleanup then
       local cleanup = state.preview_cleanup
       state.preview_cleanup = nil
       local ok, err = pcall(cleanup)
       if not ok then
-        state.message = "Preview could not be restored: " .. tostring(err)
+        state.preview_restore_failed = true
+        self:record_feedback('Restore preview failed; close and reopen this command', err)
         vim.notify(state.message, vim.log.levels.ERROR, { title = "Command Environment" })
         return false, state.message
       end
@@ -76,7 +84,8 @@ function M.new(services)
     if not state then return end
     if state.input and not state.input.callback and state.input.command.id then
       local input, field = state.input, state.input.command.arguments[state.input.index]
-      if field and state.mode == "input" and not field.secret then
+      local form_visible = state.mode == 'input' or state.mode == 'feedback' and state.frames[#state.frames] and state.frames[#state.frames].mode == 'input'
+      if field and form_visible and not field.secret then
         input.drafts[field.name] = input.choices and field_value(input) or input.text
       end
       if not input.succeeded then self.drafts:save(input.command, input, input.context or state.ctx) end
@@ -137,6 +146,8 @@ function M.new(services)
 
   function self:inspect()
     local state, command = self.active, self:selected_command()
+    if self:inspect_feedback() then return end
+    if state.mode == 'input' or state.mode == 'review' then state.message = 'No diagnostic to inspect for this form'; return end
     if not command then state.message = "Select a command with ↑/↓ or search before opening details"; return end
     self:push_mode("inspect", { inspected_id = command.id })
   end
@@ -257,6 +268,10 @@ function M.new(services)
       if self.select_presentation then
         local ok, err = self.select_presentation(id)
         if not ok then state.message = 'View changed for this session; saving failed: ' .. tostring(err) end
+        if ok then
+          local status = require('re35').persistence_status().profile
+          state.message = status.scope == 'startup' and 'View saved · restored at startup' or 'View changed · this session only'
+        end
       end
       return
     end
@@ -267,6 +282,10 @@ function M.new(services)
     if self.preferences then
       local ok, err = self.preferences:set("density", state.density)
       if not ok then state.message = "View changed for this session; saving failed: " .. tostring(err) end
+      if ok then
+        local status = require('re35').persistence_status().profile
+        state.message = status.scope == 'startup' and 'View saved · restored at startup' or 'View changed · this session only'
+      end
     end
   end
 
@@ -284,7 +303,40 @@ function M.new(services)
       elseif state.mode ~= "keymaps" and key == "<Left>" then key = "<Esc>"
       elseif state.mode ~= "keymaps" and key == "<Right>" then key = "<CR>" end
     end
+    if key == self.options.keys.details_down or key == self.options.keys.details_up then
+      local view = state.view
+      if state.mode == 'workspace' then
+        local frame = self.workspaces:active(state)
+        view = frame and frame.view or view
+        if frame and frame.id == 'history' then view = frame.data.timeline and frame.data.timeline_view or frame.data.hud end
+      end
+      local amount = math.max(1, view and view.details and (view.details.visible or 1) - 1 or 1)
+      if V.scroll_details and V.scroll_details(view, key == self.options.keys.details_down and amount or -amount) then
+        self:draw()
+        return
+      end
+    end
     state.message = nil
+    if state.mode == 'feedback' then
+      local function scroll(delta)
+        if not V.scroll_details or not V.scroll_details(state.view, delta) then
+          state.feedback_offset = math.max(1, math.min(state.feedback_rows or 1, (state.feedback_offset or 1) + delta))
+        end
+      end
+      if key == '<C-c>' or key == self.options.keys.close then self:close()
+      elseif key == '<Esc>' then self:back()
+      elseif key == '<Down>' or key == '<C-n>' or key == 'j' then
+        scroll(1)
+      elseif key == '<Up>' or key == '<C-p>' or key == 'k' then
+        scroll(-1)
+      elseif key == '<C-d>' or key == '<PageDown>' then
+        scroll(6)
+      elseif key == '<C-u>' or key == '<PageUp>' then
+        scroll(-6)
+      end
+      self:draw()
+      return
+    end
     if state.busy and not (state.mode == "input" and state.input.callback) then state.navigation = (state.navigation or 0) + 1 end
     if state.literal and (state.mode == "input" or state.mode == "search" or state.mode == "words") then
       state.literal = false
@@ -310,7 +362,7 @@ function M.new(services)
     elseif key == self.options.keys.workspaces and not shortcut_input and state.mode ~= "keymaps" and (state.mode ~= "input" or state.busy and not state.input.callback) then self:push_mode("selector", { query = "", query_cursor = 0, selector_filtering = false })
     elseif key == (self.options.keys.words or "<C-l>") and not shortcut_input and state.mode ~= "keymaps" and (state.mode ~= "input" or state.busy and not state.input.callback) then
       self:push_mode("words", { query = "", query_cursor = 0, filter = false })
-    elseif key == (self.options.keys.inspect or "<C-h>") and (state.mode == "tree" or state.mode == "search" or state.mode == "words") then self:inspect()
+    elseif key == (self.options.keys.inspect or "<C-h>") and (state.mode == "tree" or state.mode == "search" or state.mode == "words" or state.mode == "input" or state.mode == "review") then self:inspect()
     elseif state.mode == "workspace" and self.workspaces:handle(state, key, self.options) then
       -- Workspace-local navigation (including a nested picker) gets first Back.
     elseif state.mode == "keymaps" and key == "<Esc>" then
@@ -345,8 +397,8 @@ function M.new(services)
       else self:run(state.inspected_id) end
     elseif state.mode == "review" then
       local input, count = state.input, #state.input.command.arguments
-      if key == "<Down>" or key == "<C-n>" or key == "j" then input.review_selected = math.min(count + 1, (input.review_selected or count + 1) + 1)
-      elseif key == "<Up>" or key == "<C-p>" or key == "k" then input.review_selected = math.max(1, (input.review_selected or count + 1) - 1)
+      if key == "<Down>" or key == "<C-n>" or key == "j" then input.review_selected = Lists.move(input.review_selected or count + 1, count + 1, 1, self.options.navigation)
+      elseif key == "<Up>" or key == "<C-p>" or key == "k" then input.review_selected = Lists.move(input.review_selected or count + 1, count + 1, -1, self.options.navigation)
       elseif key == "<CR>" then
         if input.review_selected == count + 1 then self:execute_review()
         else state.mode, input.index, input.editing_review = "input", input.review_selected, true; self:input_field() end
@@ -359,8 +411,8 @@ function M.new(services)
         self:accept_input(false)
       elseif key == "<C-s>" and not input.callback then self:accept_input(true)
       elseif input.choices then
-        if key == "<Down>" or key == "<C-n>" or (not input.filtering and key == "j") then input.selected = math.min(#input.choices, input.selected + 1)
-        elseif key == "<Up>" or key == "<C-p>" or (not input.filtering and key == "k") then input.selected = math.max(1, input.selected - 1)
+        if key == "<Down>" or key == "<C-n>" or (not input.filtering and key == "j") then input.selected = Lists.move(input.selected, #input.choices, 1, self.options.navigation)
+        elseif key == "<Up>" or key == "<C-p>" or (not input.filtering and key == "k") then input.selected = Lists.move(input.selected, #input.choices, -1, self.options.navigation)
         elseif not input.filtering and key == "/" then input.filtering = true
         elseif not input.filtering and key == "<Space>" and field.kind == "multiselect" then
           local item = input.choices[input.selected]
@@ -385,8 +437,8 @@ function M.new(services)
       end
     elseif state.mode == "search" or state.mode == "words" or state.mode == "selector" then
       local results = state.mode ~= "selector" and self:results() or self:workspace_choices()
-      if key == "<Down>" or key == "<C-n>" or (state.mode == "selector" and not state.selector_filtering and key == "j") then state.selected = math.min(#results, state.selected + 1)
-      elseif key == "<Up>" or key == "<C-p>" or (state.mode == "selector" and not state.selector_filtering and key == "k") then state.selected = math.max(1, state.selected - 1)
+      if key == "<Down>" or key == "<C-n>" or (state.mode == "selector" and not state.selector_filtering and key == "j") then state.selected = Lists.move(state.selected, #results, 1, self.options.navigation)
+      elseif key == "<Up>" or key == "<C-p>" or (state.mode == "selector" and not state.selector_filtering and key == "k") then state.selected = Lists.move(state.selected, #results, -1, self.options.navigation)
       elseif key == "<Tab>" and state.mode == "words" and results[state.selected] then
         state.query = results[state.selected].word_path or state.query
         state.query_cursor, state.selected_id = vim.fn.strchars(state.query), nil
@@ -431,7 +483,7 @@ function M.new(services)
     elseif state.mode == "tree" then
       if key == "<Down>" or key == "<Up>" then
         state.tree_selected_entry = nil
-        state.tree_selection = math.max(1, math.min(#(state.tree_items or {}), (state.tree_selection or (key == "<Down>" and 0 or 2)) + (key == "<Down>" and 1 or -1)))
+        state.tree_selection = state.tree_selection and Lists.move(state.tree_selection, #(state.tree_items or {}), key == '<Down>' and 1 or -1, self.options.navigation) or 1
         self:draw(); return
       elseif key == "<CR>" and state.tree_items and state.tree_items[state.tree_selection or 1] then
         if not state.tree_selection then
@@ -649,10 +701,13 @@ function M.new(services)
     for _, frame in ipairs(state.stack) do workspaces[#workspaces + 1] = frame.id end
     return { active = true, kind = state.mode, context = vim.deepcopy(state.ctx), path = copy_path(state.path),
       visible = state.visible, density = state.density, presentation_id = state.presentation_id, query = state.query, selected = state.selected,
-      page = state.page, message = state.message, busy = state.busy, workspaces = workspaces, window = state.view.win, buffer = state.view.buf }
+      page = state.page, message = state.message, busy = state.busy, workspaces = workspaces, window = state.view.win, buffer = state.view.buf,
+      details_window = state.view.details and state.view.details.win,
+      panels = state.view.panel_report and vim.deepcopy(state.view.panel_report) or nil }
   end
 
   Navigation.attach(self)
+  Feedback.attach(self)
   Input.attach(self, dispatch_submission)
   Presenter.attach(self)
 
@@ -660,7 +715,7 @@ function M.new(services)
   function self:handle(key, raw)
     local ok, err = xpcall(function() handle(self, key, raw) end, debug.traceback)
     if not ok and self.active then
-      self.active.message = tostring(err):match("[^\n]+")
+      self:record_feedback('Interaction', err)
       local rendered = pcall(self.draw, self)
       if not rendered then self:close(); vim.notify(tostring(err), vim.log.levels.ERROR) end
     end

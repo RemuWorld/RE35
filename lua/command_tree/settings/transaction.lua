@@ -128,7 +128,8 @@ function M.apply(frame, ctx, session)
     after_runtime = CE().runtime_bindings(), scope = scope(), cursor = copy(cursor) }
   if #journal > 10 then table.remove(journal, 1) end
   cursor.backend_recovery = backend.applied_recovery(cursor.backend_recovery,result)
-  cursor.message = return_error and "Settings applied · " .. return_error or "Settings applied"
+  cursor.message = require('command_tree.persistence').applied()
+  if return_error then cursor.message = cursor.message .. ' · ' .. return_error end
   frame.data.base, frame.data.base_runtime, frame.data.draft, frame.data.notes, frame.data.review = nil, nil, nil, nil, nil
   reopen(ctx, cursor, navigation, backend.applied_return(return_token, cursor.backend_recovery))
   return true, result
@@ -148,7 +149,7 @@ function M.undo(ctx, session)
   if not ok then return false, result end
   table.remove(journal)
   cursor.backend_recovery = require('command_tree.backend_editor').applied_recovery(cursor.backend_recovery,result)
-  cursor.message = "Settings change undone"
+  cursor.message = "Settings change undone · " .. require('command_tree.persistence').applied()
   reopen(ctx, cursor, navigation)
   return true, result
 end
@@ -159,14 +160,14 @@ function M.reload(frame, ctx, session)
   local navigation = session and session.settings_navigation
   local ok, result = CE().reload_profile()
   if not ok then message(frame, session, tostring(result)); return false, result end
-  cursor.message = "Settings reloaded"
+  cursor.message = "Settings reloaded · saved profile is active"
   reopen(ctx, cursor, navigation)
   return true, result
 end
 
 local function discard(frame, _, session)
   frame.data.base, frame.data.base_runtime, frame.data.draft, frame.data.notes, frame.data.review, frame.data.conflict = nil, nil, nil, nil, nil, nil
-  message(frame, session, "Staged changes discarded")
+  message(frame, session, "Draft discarded · applied settings kept")
   return true
 end
 
