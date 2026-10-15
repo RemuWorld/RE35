@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.3
+
+- Keep source text, number/sign columns and folds inside History's symbolic
+  frame without changing the original document or native undo owner.
+- Size Compact/Minimal input scenes independently while keeping selection,
+  filtering and pagination stable. Preserve required review and source facts.
+- Keep Full shortcut guides at a stable width, wrap descriptions without
+  splitting key combinations, and use the same guide for History and Timeline.
+- Show neutral, temporary confirmations above the command panel without
+  crowding its title or moving the main window. Keep failures inspectable.
+
 ## 0.2.2
 
 - Distinguish branches with a persistent marker and emphasis, and highlight the

@@ -392,7 +392,6 @@ function P.draw(V, view, data, opts, groups)
   end
   local Panels = require('command_tree.view.panels')
   Panels.main(view, lines, config, opts)
-  require('command_tree.view.status').decorate(V, data, config, groups)
   V.window(view, lines, config)
   vim.wo[view.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
     .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal
@@ -409,6 +408,7 @@ function P.draw(V, view, data, opts, groups)
       vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4], priority = 100 })
     end
   end
+  require('command_tree.view.status').draw(V, view, data, opts, groups)
   Panels.draw(V, view, data, opts, groups)
   vim.cmd.redraw()
   return data.page, pages

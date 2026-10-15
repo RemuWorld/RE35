@@ -3,6 +3,8 @@ require("command_tree.history")
 local K, V = require("command_tree.keys"), require("command_tree.view")
 local M = {}
 local Lists = require('command_tree.list_navigation')
+local Guide = require('command_tree.session.key_guide')
+local Frame = require('command_tree.history_frame')
 local ns = vim.api.nvim_create_namespace("HistoryPreview")
 M.namespace = ns
 
@@ -15,7 +17,8 @@ function M.clear(state)
     local ok, err = V.close(view)
     if not ok then failures[#failures + 1] = err end
   end
-  for _, part in ipairs(state.frames or {}) do close(part) end
+  local frame_ok, frame_err = Frame.clear(state)
+  if not frame_ok then failures[#failures + 1] = frame_err end
   close(state.hud)
   close(state.timeline_view)
   -- Clearing removes extmarks. A resumed workspace must paint them again even
@@ -23,6 +26,56 @@ function M.clear(state)
   state.preview_key, state.preview_message, state.preview_target = nil, nil, nil
   if #failures > 0 then error(table.concat(failures, "; ")) end
   state.frames, state.hud, state.timeline_view = {}, {}, {}
+end
+
+local function hints(opts, timeline)
+  local keys, result = opts.action_keys or {}, {}
+  local function key(id, fallback)
+    local value = keys[id]
+    if value == nil then return fallback end
+    return value ~= "—" and value ~= false and value or nil
+  end
+  local function add(value, label, group)
+    if value then result[#result + 1] = { key = Guide.hint_key(value), label = label, group = group } end
+  end
+  local function pair(first, second, label, first_label, second_label)
+    if first and second then add(Guide.hint_pair(first, second), label, "navigation")
+    else add(first, first_label, "navigation"); add(second, second_label, "navigation") end
+  end
+  if timeline then
+    pair(key("previous", "k"), key("next", "j"), "Select", "Select previous", "Select next")
+    pair(key("page_up", "<C-u>"), key("page_down", "<C-d>"), "Page", "Page up", "Page down")
+    add(key("restore", "<CR>"), "Restore", "actions")
+  end
+  add(key("undo", "u"), "Undo", "actions")
+  add(key("redo", "r"), "Redo", "actions")
+  if not timeline then add(key("timeline", "t"), "Timeline", "actions") end
+  add(key("refresh", "R"), "Refresh", "actions")
+  add(key("back", "<Esc>"), "Back", "navigation")
+  add(opts.detail_key or "?", "View", "information")
+  add(opts.close_key or "\\", "Close", "navigation")
+  local help = {}
+  for _, hint in ipairs(result) do help[#help + 1] = hint.key .. " " .. hint.label end
+  return result, table.concat(help, "  ·  ")
+end
+
+local function view_options(state, opts, target_win)
+  local timeline = state.timeline ~= nil
+  local result = { width = timeline and math.max(opts.width, 52) or opts.width,
+    max_width = timeline and 78 or opts.max_width or 72, max_height = timeline and 14 or opts.max_height or 16,
+    density = opts.density, position = opts.position, icons = false, target_win = target_win,
+    layout = "fixed", presentation_scene = timeline and "history_timeline" or "history",
+    guide_anchor = "group", zindex = 60, accent = "#E6A0A0" }
+  if opts.presentation then
+    -- History placement belongs to its source frame. Preserve the selected
+    -- mode's authored density, spacing, decoration and roles while applying
+    -- only the History-local footprint to a private copy of that model.
+    local model = vim.deepcopy(opts.presentation)
+    for _, name in ipairs({ "width", "max_width", "max_height", "position" }) do model.layout[name] = result[name] end
+    model.information.icons = false
+    result.presentation = model
+  end
+  return result
 end
 
 function M.sequence(ctx)
@@ -148,34 +201,12 @@ function M.preview(state, opts)
   end
 end
 
-function M.draw(state, opts)
-  if not K.valid(state.ctx) then return end
+local function draw(state, opts)
   opts = vim.tbl_extend("force", { width = 44, position = "bottom-right", density = "full", close_key = "\\", detail_key = "?" }, opts or {})
-  local pos = vim.api.nvim_win_get_position(state.ctx.win)
-  local height, width = vim.api.nvim_win_get_height(state.ctx.win), vim.api.nvim_win_get_width(state.ctx.win)
-  local top, left = math.max(0, pos[1] - 1), math.max(0, pos[2] - 1)
-  local bottom = math.min(vim.o.lines - vim.o.cmdheight - 1, pos[1] + height)
-  local right = math.min(vim.o.columns - 1, pos[2] + width)
-  local fw, fh = right - left + 1, bottom - top + 1
-  state.frames, state.hud = state.frames or {}, state.hud or {}
-  -- These four windows mark the source being edited. Density changes only
-  -- the command HUD, never this symbolic frame around the source window.
-  if fw >= 2 and fh >= 3 then
-    local vertical = {}; for _ = 1, fh - 2 do vertical[#vertical + 1] = "┃" end
-    local parts = {
-      { { "┏" .. string.rep("━", fw - 2) .. "┓" }, top, left, fw, 1 },
-      { { "┗" .. string.rep("━", fw - 2) .. "┛" }, bottom, left, fw, 1 },
-      { vertical, top + 1, left, 1, fh - 2 }, { vertical, top + 1, right, 1, fh - 2 },
-    }
-    for i, part in ipairs(parts) do
-      state.frames[i] = state.frames[i] or {}
-      V.window(state.frames[i], part[1], { relative = "editor", row = part[2], col = part[3],
-        width = part[4], height = part[5], border = "none", zindex = 45 }, true)
-    end
-  else
-    for _, part in ipairs(state.frames) do V.close(part) end
-    state.frames = {}
-  end
+  local target_win = Frame.draw(state)
+  local shortcut_hints, help = hints(opts, state.timeline ~= nil)
+  local window_options = view_options(state, opts, target_win)
+  state.hud = state.hud or {}
   if state.timeline then
     V.close(state.hud)
     state.timeline_view = state.timeline_view or {}
@@ -190,10 +221,7 @@ function M.draw(state, opts)
       label = "Undo states", items = items, selected = state.timeline.selected,
       message = state.preview_message or state.message,
       status = state.preview_message or "Selected state preview",
-      help = opts.help or ("j/k Select  ·  Enter Restore  ·  R Refresh  ·  Esc Back  ·  " .. opts.close_key .. " Close") },
-      { width = math.max(opts.width, 52), max_width = 78, max_height = 14, icons = false,
-        density = opts.density, position = opts.position, presentation = opts.presentation, target_win = state.ctx.win,
-        zindex = 60, accent = "#E6A0A0" })
+      hints = shortcut_hints, help = help }, window_options)
     return
   end
   V.close(state.timeline_view)
@@ -207,9 +235,18 @@ function M.draw(state, opts)
       { key = (opts.action_keys or {}).timeline or "t", name = "Timeline", group = true } },
     status = state.preview_message or "Next undo highlighted",
     message = (state.preview_message ~= "Nothing to undo" and state.preview_message or nil) or state.message,
-    help = opts.help or ("Esc Back  ·  " .. opts.detail_key .. " View  ·  " .. opts.close_key .. " Close"),
-  }, { width = opts.width, max_width = opts.max_width or 72, density = opts.density, icons = false,
-    position = opts.position, presentation = opts.presentation, target_win = state.ctx.win, zindex = 60, accent = "#E6A0A0" })
+    hints = shortcut_hints, help = help,
+  }, window_options)
+end
+
+function M.draw(state, opts)
+  if not K.valid(state.ctx) then M.clear(state); return end
+  local ok, reason = xpcall(function() draw(state, opts) end, debug.traceback)
+  if ok then return end
+  -- A failed frame/HUD/guide allocation must reveal the untouched native
+  -- source again. Failed cleanup keeps its handles for the next lifecycle try.
+  local cleared, clear_reason = pcall(M.clear, state)
+  error(tostring(reason) .. (not cleared and ("; History cleanup: " .. tostring(clear_reason)) or ""), 0)
 end
 
 function M.step(state, command)

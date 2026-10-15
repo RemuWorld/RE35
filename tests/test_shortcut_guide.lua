@@ -45,6 +45,7 @@ for _, preset in ipairs({ false, true }) do
   H.eq('right', view.panel_report.guide, 'Effective right placement is reported')
   H.eq(initial, geometry(view), 'Adding hints does not move or resize main')
   local guide_position = geometry(view.guide)
+  H.eq(30, guide_position.width, 'Full guide uses the fixed 30-cell content width')
   H.eq(initial.row, guide_position.row, 'Guide aligns with the main top')
   H.eq(initial.col + initial.width + border(view) + 1, guide_position.col, 'Guide occupies spare cells after a one-cell gap')
   H.ok(text(view.guide):find('Navigation', 1, true) and text(view.guide):find('Information', 1, true)
@@ -85,9 +86,75 @@ for _, preset in ipairs({ false, true }) do
   V.close(view)
 end
 
+-- Remapped typed controls govern the guide even when an adapter also supplies
+-- legacy help. Descriptions wrap fully inside the same width in every scene.
+for _, preset in ipairs({ false, true }) do
+  local view, opts, data = {}, options('full', preset), scene()
+  V.draw(view, data, opts)
+  local initial = geometry(view)
+  local description = 'Inspect the selected command and preserve the complete description'
+  local unicode = '説明全文を保持したまま複数行に折り返して表示する'
+  data.help = 'Esc Back · Enter Run · ? View'
+  data.hints = {
+    { key = '<F8>', label = 'Back to the original command tree', group = 'navigation' },
+    { key = '<C-M-k>', label = description, group = 'information' },
+    { key = '<F9>', label = unicode, group = 'actions' },
+  }
+  local original_hints = vim.deepcopy(data.hints)
+  opts._details_hint = { key = '<S-PageUp>/<S-PageDown>', label = 'Scroll details', group = 'navigation' }
+  V.draw(view, data, opts)
+  H.ok(view.guide, 'Typed remapped shortcuts can use the right guide')
+  H.eq(initial, geometry(view), 'Typed controls preserve the existing main geometry')
+  H.eq(30, geometry(view.guide).width, 'Long descriptions preserve the fixed guide width')
+  H.ok(text(view.guide):find('F8', 1, true) and text(view.guide):find('Ctrl+Alt+k', 1, true),
+    'Guide shows the actual configured controls')
+  H.ok(not text(view.guide):find('Esc', 1, true), 'Typed controls take precedence over parsed legacy help')
+  local joined = text(view.guide):gsub('%s+', '')
+  H.ok(joined:find(description:gsub('%s+', ''), 1, true), 'Wrapped description retains every word')
+  H.ok(joined:find(unicode, 1, true), 'Unicode labels wrap by display cells without losing characters')
+  H.eq(original_hints, data.hints, 'Adding the scrolling control never mutates source hints')
+  audit(view.guide)
+  local long_height = geometry(view.guide).height
+  data.help, opts._details_hint = nil, nil
+  data.hints = { { key = '<F7>', label = 'Run', group = 'actions' } }
+  V.draw(view, data, opts)
+  H.ok(view.guide, 'Typed controls do not require duplicate legacy help')
+  H.eq(30, geometry(view.guide).width, 'Short controls preserve the same fixed guide width')
+  H.ok(geometry(view.guide).height < long_height, 'Guide height follows its complete wrapped contents')
+  H.eq(initial, geometry(view), 'Changing controls keeps main geometry stable')
+  audit(view.guide)
+  data.hints = nil
+  V.draw(view, data, opts)
+  H.eq(nil, view.guide, 'Removing typed controls closes the guide')
+  H.eq(initial, geometry(view), 'Removing controls keeps main geometry stable')
+  V.close(view)
+end
+
+-- A long remapped chord uses a whole row instead of shrinking the guide or
+-- splitting the chord into fragments. An impossible chord yields all hints.
+local view, opts, data = {}, options('full', false), scene()
+local chord = '<C-M-S-PageUp>'
+data.hints = { { key = chord, label = 'Inspect all selected command details completely', group = 'information' } }
+V.draw(view, data, opts)
+H.ok(view.guide, 'A wide chord that fits can occupy its own row')
+H.ok(text(view.guide):find('Ctrl+Shift+Alt+PgUp', 1, true), 'Wide configured chord is never split')
+H.eq(30, geometry(view.guide).width, 'Wide chord cannot expand the guide')
+audit(view.guide)
+data.hints = { { key = string.rep('F', 29), label = 'Complete oversized control', group = 'actions' },
+  { key = '<F8>', label = 'Other control', group = 'actions' } }
+local oversized = vim.deepcopy(data.hints)
+V.draw(view, data, opts)
+H.eq(nil, view.guide, 'A chord wider than the guide falls back below as a whole')
+H.eq('below', view.panel_report.guide, 'Oversized chord reports the below placement')
+local retained = table.concat(view.details.lines, '\n')
+H.ok(retained:find(string.rep('F', 29), 1, true) and retained:find('Complete oversized control', 1, true)
+  and retained:find('Other control', 1, true), 'Fallback retains every complete typed control below')
+H.eq(oversized, data.hints, 'Oversized fallback preserves its typed source')
+V.close(view)
+
 -- The complete guide falls back below when either horizontal or vertical room
 -- is insufficient. No hint group is silently discarded to keep a side panel.
-local view, opts, data = {}, options('full', false), scene()
+view, opts, data = {}, options('full', false), scene()
 data.help = help
 V.draw(view, data, opts)
 local guide_win, guide_buf = view.guide.win, view.guide.buf
@@ -97,7 +164,7 @@ H.eq(nil, view.guide, 'Terminal narrowing closes the stale right guide')
 H.ok(not vim.api.nvim_win_is_valid(guide_win) and not vim.api.nvim_buf_is_valid(guide_buf), 'Resize cleans stale guide handles')
 H.eq('below', view.panel_report.guide, 'Narrow viewport explicitly reports below fallback')
 H.ok(view.details and text(view.details):find('Back', 1, true), 'Navigation hints remain below after fallback')
-local retained = table.concat(view.details.lines, '\n')
+retained = table.concat(view.details.lines, '\n')
 H.ok(retained:find('Shift+PgUp/Down', 1, true), 'Fallback retains the entire long key chord')
 V.close(view)
 vim.o.columns, vim.o.lines = 180, 48
@@ -122,6 +189,29 @@ H.eq('below', view.panel_report.guide, 'Right-anchored view uses below fallback'
 V.close(view)
 opts.position = nil
 
+-- History reserves a whole panel group at the right edge before shortcuts
+-- exist. Its guide can extend upward to preserve that source-bound anchor.
+opts.position, opts.guide_anchor = 'bottom-right', 'group'
+data.help = nil
+V.draw(view, data, opts)
+local group_position = geometry(view)
+data.hints = {}
+for index = 1, 12 do
+  data.hints[index] = { key = '<F' .. index .. '>', group = 'navigation',
+    label = 'Navigate to the selected command entry ' .. index }
+end
+V.draw(view, data, opts)
+H.ok(view.guide, 'Full group anchor reserves space for its complete right guide')
+H.eq(group_position, geometry(view), 'Group main keeps its anchor when complete hints appear')
+H.eq(30, geometry(view.guide).width, 'Group anchor uses the shared fixed guide width')
+H.ok(geometry(view.guide).row < geometry(view).row, 'Tall group guide extends upward inside its viewport')
+audit(view.guide)
+data.hints = nil
+V.draw(view, data, opts)
+H.eq(group_position, geometry(view), 'Group main keeps its anchor when hints disappear')
+V.close(view)
+opts.position, opts.guide_anchor = nil, nil
+
 local many = {}
 for index = 1, 32 do
   local label = ({ 'Back', 'Details', 'Run' })[(index - 1) % 3 + 1] .. index
@@ -139,7 +229,7 @@ V.close(view)
 -- A workspace guide belongs wholly inside the source window's viewport.
 vim.cmd('vsplit')
 local owned_source = vim.api.nvim_get_current_win()
-opts.target_win, opts.width = owned_source, 24
+opts.target_win, opts.width = owned_source, 22
 data.help = 'Esc Back · Enter Run · ? View'
 V.draw(view, data, opts)
 H.ok(view.guide, 'A source window with spare right cells can show its guide')

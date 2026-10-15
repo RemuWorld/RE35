@@ -160,7 +160,7 @@ History.draw(state, { density = 'minimal' })
 H.eq(4, #state.frames, 'Minimal retains all four history workspace frame edges')
 V.close(state.hud)
 for _, edge in ipairs(state.frames) do H.ok(vim.api.nvim_win_is_valid(edge.win), 'history symbolic edge remains visible') end
-for _, edge in ipairs(state.frames) do V.close(edge) end
+History.clear(state)
 
 -- Follow real Session Down/Up handlers across Compact pages without executing.
 local Session = require('command_tree.session')

@@ -2,7 +2,7 @@
   "name": "re35-desktop",
   "displayName": "RE35 Command Environment",
   "description": "Development host for shared RE35 documents, profiles and sequential project tasks.",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "publisher": "RemuWorld",
   "license": "Apache-2.0",
   "engines": {

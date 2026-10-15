@@ -344,6 +344,7 @@ function M.definition()
         required_label = frame.data.source == 'task' and result and result.title or nil,
         required_notice = result and result.truncated and (result.status_message or status or 'Partial results; output limit reached') or nil,
         target = item and item.detail or nil,
+        _source_target_items = result and result.items or nil,
         label = (frame.data.source == "task" and result and result.title or names[frame.data.source]) .. (frame.data.source == "diagnostics" and (frame.data.scope == "buffer" and " · current buffer" or " · all buffers") or "")
           .. " · " .. #(frame.data.items or {}) .. " results",
         query = frame.data.input_active and frame.data.filter or nil,

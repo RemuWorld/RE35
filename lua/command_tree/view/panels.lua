@@ -10,8 +10,8 @@ local function role_group(role, groups)
     or 'CommandTreeDesc'
 end
 
--- Each key + label is one wrap unit. Related controls occupy distinct rows;
--- a narrow viewport shortens labels before it yields a complete key chord.
+-- Each key is atomic. Related controls occupy distinct rows; descriptions
+-- that cannot share their chord's row wrap below it without losing text.
 function M.help_rows(V, data, width, groups)
   local hints = data.hints or Guide.help_hints(data.help)
   if type(hints) ~= 'table' then return nil end
@@ -45,16 +45,97 @@ function M.help_rows(V, data, width, groups)
         -- Never split an impossible chord into misleading fragments on two
         -- lines. At this size even its compact spelling cannot be shown.
         if V.width(key) > width then key = V.clip('…', width) end
-        label = V.clip(label, math.max(0, width - V.width(key) - 1))
+        chunks[#chunks + 1] = { key, role_group('accent', groups) }
+        emit()
+        local current = ''
+        for char in label:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+          if V.width(current .. char) > width then
+            if current ~= '' then rows[#rows + 1] = { { current, role_group('normal', groups) } }; current = '' end
+            if V.width(char) > width then char = V.clip(char, width) end
+          end
+          current = current .. char
+        end
+        if current ~= '' then rows[#rows + 1] = { { current, role_group('normal', groups) } } end
+        key, label, separator = '', '', ''
       end
-      if separator ~= '' then chunks[#chunks + 1] = { separator, role_group('muted', groups) } end
-      chunks[#chunks + 1] = { key, role_group('accent', groups) }
-      if label ~= '' then chunks[#chunks + 1] = { ' ' .. label, role_group('normal', groups) } end
-      occupied = occupied + V.width(separator .. key .. (label ~= '' and ' ' .. label or ''))
+      if key ~= '' or label ~= '' then
+        if separator ~= '' then chunks[#chunks + 1] = { separator, role_group('muted', groups) } end
+        chunks[#chunks + 1] = { key, role_group('accent', groups) }
+        if label ~= '' then chunks[#chunks + 1] = { ' ' .. label, role_group('normal', groups) } end
+        occupied = occupied + V.width(separator .. key .. (label ~= '' and ' ' .. label or ''))
+      end
     end
     emit()
   end
   return #rows > 0 and rows or nil
+end
+
+-- Count required text using the same bounded character wrapping as the main
+-- presentation. These costs depend on the scene's question/domain, never its
+-- current selection, typed value or final page length.
+local function required_rows(V, text, width, maximum)
+  text = tostring(text):gsub('[\r\n\t]', ' ')
+  local prefix = vim.fn.strcharpart(text, 0, 4096)
+  if #prefix ~= #text then return maximum end
+  local current, rows = '', 1
+  for char in prefix:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+    if V.width(char) > width then return maximum end
+    if V.width(current .. char) > width then
+      rows, current = rows + 1, ''
+      if rows >= maximum then return maximum end
+    end
+    current = current .. char
+  end
+  return rows
+end
+
+local function dense_height(V, data, opts, model, width, border, maximum)
+  local layout, density = model and model.layout or opts, model and model.layout.density or opts.density
+  local interactive = data.selected ~= nil or data.query ~= nil or data.input == true or data.content ~= nil
+  local padding = model and model.spacing.horizontal or density == 'minimal' and 2 or 0
+  padding = math.min(padding, math.max(0, math.floor((width - 1) / 2)))
+  local inside = math.max(1, width - padding * 2)
+  local vertical = model and model.spacing.vertical or 0
+  local chrome = 1 + (data.query ~= nil and 1 or 0)
+    + (model and model.information.title and border == 0 and 1 or 0)
+    + (model and model.decoration.separator and 1 or 0)
+    + (model and model.information.status and (density ~= 'minimal' or interactive) and 1 or 0)
+  for _, value in ipairs({ data.input and data.label or false, data.required_label or false,
+    data.required_notice or false }) do
+    if value then chrome = chrome + required_rows(V, value, inside, maximum) end
+  end
+  if data.target or type(data._source_target_items) == 'table' then
+    local target_rows = data.target and required_rows(V, 'Target: ' .. data.target, inside, maximum) or 0
+    -- Results targets come from the selectable domain. Reserve its longest
+    -- identity rather than changing height when the selected result changes.
+    for index, item in ipairs(data._source_target_items or data.items or {}) do
+      if index > 5000 then target_rows = maximum; break end
+      if type(item.detail) == 'string' then
+        target_rows = math.max(target_rows, required_rows(V, 'Target: ' .. item.detail, inside, maximum))
+        if target_rows == maximum then break end
+      end
+    end
+    chrome = chrome + target_rows
+  end
+  local slots = layout.rows or (density == 'minimal' and opts.minimal_rows or opts.compact_rows)
+    or (density == 'minimal' and 3 or 6)
+  if data.input then
+    local editing = false
+    for _, item in ipairs(data.items or {}) do if item.editing_text ~= nil then editing = true; break end end
+    if editing then slots = 1
+    elseif data._input_choice_labels == false then return maximum
+    else
+      -- The presenter supplies the unfiltered domain. Unknown adapters get a
+      -- small fixed wrapping allowance instead of sizing to current results.
+      local longest = data._input_choice_labels and 1 or 2
+      for _, label in ipairs(data._input_choice_labels or {}) do
+        longest = math.max(longest, required_rows(V, '› [x] ' .. label, inside, maximum))
+        if longest == maximum then return maximum end
+      end
+      slots = slots + longest - 1
+    end
+  elseif density == 'minimal' and not interactive then slots = 0 end
+  return math.min(maximum, slots + chrome + vertical * 2)
 end
 
 function M.critical_options(data, opts)
@@ -146,27 +227,15 @@ function M.prepare(V, view, data, opts)
   local maximum = math.max(1, math.min(layout.max_width or 72, viewport.width - border))
   if not opts.target_win then maximum = math.max(1, math.min(maximum, viewport.width - border - 2)) end
   local width = math.max(1, math.min(layout.width or 48, maximum))
-  local vertical = model and model.spacing.vertical or 0
   local maximum_height = math.max(1, layout.max_height or 16)
   local review = opts.presentation_scene == 'review' or data.review == true or data.required_review == true
     or type(data.required_facts) == 'table' and next(data.required_facts) ~= nil
-  local interactive = data.selected ~= nil or data.query ~= nil or data.input == true or data.content ~= nil
   local desired = maximum_height
-  if not review and not data.input and not data.required_label and not data.target and not data.required_notice
-    and data.content == nil then
+  if not review and data.content == nil and (density == 'compact' or density == 'minimal') then
     -- Reserve a page of selectable rows, rather than sizing to the current
     -- selection or last page. Dense modes need only their actual chrome;
     -- descriptions and errors use the independently reserved details panel.
-    local chrome = 1 + (data.query ~= nil and 1 or 0)
-      + (model and model.information.title and border == 0 and 1 or 0)
-      + (model and model.decoration.separator and 1 or 0)
-      + (model and model.information.status and (density ~= 'minimal' or interactive) and 1 or 0)
-    if density == 'compact' then
-      desired = math.min(maximum_height, (layout.rows or opts.compact_rows or 6) + chrome + vertical * 2)
-    elseif density == 'minimal' then
-      desired = math.min(maximum_height, (interactive and (layout.rows or opts.minimal_rows or 3) or 0)
-        + chrome + vertical * 2)
-    end
+    desired = dense_height(V, data, opts, model, width, border, maximum_height)
   end
   local main_height = math.max(1, math.min(desired, viewport.height - border))
   local config = opts.details or {}
@@ -184,7 +253,12 @@ function M.prepare(V, view, data, opts)
   local top, left = position:find('top', 1, true), position:find('left', 1, true)
   local row = bottom and viewport.top + viewport.height - footprint
     or top and viewport.top + 1 or viewport.top + math.floor((viewport.height - footprint) / 2)
-  local col = right and viewport.left + viewport.width - width - border - (opts.target_win and 0 or 1)
+  -- History anchors the whole Full group at the lower right. The guide's
+  -- fixed 30-cell body, two border cells and one-cell gap are reserved even
+  -- before help exists; changing hint/error content cannot move the main.
+  local guide_reserve = opts.guide_anchor == 'group' and density == 'full'
+    and width + border + 33 <= viewport.width and 33 or 0
+  local col = right and viewport.left + viewport.width - width - border - guide_reserve - (opts.target_win and 0 or 1)
     or left and viewport.left + 1 or viewport.left + math.floor((viewport.width - width - border) / 2)
   row = math.max(viewport.top, math.min(row, viewport.top + viewport.height - footprint))
   col = math.max(viewport.left, math.min(col, viewport.left + viewport.width - width - border))
@@ -192,6 +266,7 @@ function M.prepare(V, view, data, opts)
     border = border, detail_border = detail_border, detail_height = detail_height,
     detail_row = row + main_height + border, separate = separate,
     density = density, viewport = viewport }
+  if guide_reserve > 0 then fixed.guide_col, fixed.guide_right = col + width + border + 1, true end
   local effective = vim.tbl_extend('force', {}, opts, { _fixed_panel = fixed })
   view.panel_report = { layout = 'fixed', details = separate and 'separate' or requested and 'inline' or 'disabled',
     fallbacks = {} }

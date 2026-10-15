@@ -7,7 +7,7 @@ explicit host contracts keep that model reusable.
 
 ## Current scope
 
-RE35 0.2.2 includes the command, recipe, Results/recovery and presentation
+RE35 0.2.3 includes the command, recipe, Results/recovery and presentation
 workflows from 0.1.0, with remembered themes, list wrapping, inspectable
 errors, storage-state labels, first-use guidance, an Editor return destination
 and independent command/details panels.
@@ -40,6 +40,11 @@ providers can offer richer capabilities. Improve equivalent workflows before
 adding more hosts. Host-specific distribution packages are possible future work.
 
 ## Research and optional extensions
+
+Extend discovery and command access into ordinary editing, so RE35 can cover
+native key guidance as well as its explicit command environment. The editor
+continues to own actual Normal/Insert behavior and undo; entry and guidance
+policies need explicit ownership and user configuration.
 
 Explicitly assigned native editor shortcuts could invoke stable command IDs
 independently of tree locations. This needs conflict handling and owned keymap

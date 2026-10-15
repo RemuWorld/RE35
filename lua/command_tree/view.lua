@@ -98,7 +98,9 @@ end
 function M.close(view)
   if not view then return true end
   local panel_failures = {}
-  for _, name in ipairs({ 'details', 'guide' }) do
+  local timer_ok, timer_error = require('command_tree.view.status').cancel(view)
+  if not timer_ok then panel_failures[#panel_failures + 1] = timer_error end
+  for _, name in ipairs({ 'details', 'guide', 'status' }) do
     local panel = view[name]
     if panel then
       view[name] = nil
@@ -122,7 +124,7 @@ function M.close(view)
   view.win = win and vim.api.nvim_win_is_valid(win) and win or nil
   view.buf = buf and vim.api.nvim_buf_is_valid(buf) and buf or nil
   for _, reason in ipairs(panel_failures) do failures[#failures + 1] = reason end
-  if view.win or view.buf or view.details or view.guide then return false, table.concat(failures, "; ") end
+  if view.win or view.buf or view.details or view.guide or view.status or view.status_timer then return false, table.concat(failures, "; ") end
   if view.presentation_slot then presentation_slots[view.presentation_slot], view.presentation_slot = nil, nil end
   return true
 end
@@ -196,7 +198,7 @@ end
 local function draw(view, data, opts)
   opts = opts or {}
   local Panels = require('command_tree.view.panels')
-  data = require('command_tree.view.status').prepare(M, data, opts)
+  data = require('command_tree.view.status').prepare(M, data, opts, view)
   local source_data = data
   data, opts = Panels.prepare(M, view, data, opts)
   if opts.presentation then
@@ -493,7 +495,6 @@ local function draw(view, data, opts)
     config.title_pos, config.footer, config.footer_pos = "left", "", "right"
   end
   Panels.main(view, lines, config, opts)
-  require('command_tree.view.status').decorate(M, data, config)
   M.window(view, lines, config)
   if view.presentation_slot then presentation_slots[view.presentation_slot], view.presentation_slot = nil, nil end
   if opts.accent then
@@ -514,6 +515,7 @@ local function draw(view, data, opts)
       vim.api.nvim_buf_set_extmark(view.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4], priority = 100 })
     end
   end
+  require('command_tree.view.status').draw(M, view, data, opts)
   Panels.draw(M, view, data, opts)
   vim.cmd.redraw()
   return data.page, pages

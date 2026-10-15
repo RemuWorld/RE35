@@ -152,6 +152,20 @@ function M.attach(self)
       data.title, data.label = input.command.name, (field.prompt or field.name) .. " (" .. input.index .. "/" .. #input.command.arguments .. ")"
       data.path = self.options.open_key .. " " .. path_label(state.path) .. " › " .. field.name
       if input.choices then
+        -- Layout uses the stable unfiltered domain, not the current filtered
+        -- count or selection. Oversized/private domains keep the larger safe
+        -- reading budget without copying unbounded labels into the view.
+        data._input_choice_labels = false
+        local domain = input.all_choices or input.choices
+        if not field.secret and #domain <= 1024 then
+          local labels = {}
+          for _, item in ipairs(domain) do
+            local label = A.label(item)
+            if #vim.fn.strcharpart(label, 0, 4096) ~= #label then labels = nil; break end
+            labels[#labels + 1] = label
+          end
+          data._input_choice_labels = labels or false
+        end
         for _, item in ipairs(input.choices) do data.items[#data.items + 1] = {
           key = field.kind == "multiselect" and (A.contains(input.checked, A.value(item)) and "[x]" or "[ ]") or "", name = A.label(item) } end
         data.selected = input.selected

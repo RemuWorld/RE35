@@ -46,12 +46,17 @@ content-sized layout, or `details.enabled = false` to keep inline feedback.
 Small viewports fall back to inline feedback. Required input/review/source
 facts remain visible or the associated effect is refused.
 
-Full places recognized keyboard controls in a separate panel on the right when
-the source viewport can fit every key and label. Narrower viewports keep them
-below; custom help prose remains below. Neither placement moves the main panel.
-Routine view-save and Settings confirmations use neutral text near the title;
-storage failures and diagnostics stay below. Small or title-free views keep
-their existing information policy.
+Full places recognized keyboard controls in a separate, fixed-width panel on the
+right when the source viewport can fit every key and label. Descriptions wrap;
+key combinations stay intact. Narrower viewports keep controls below; custom
+help prose remains below. Selection and message changes do not move the main
+panel. History and Timeline use the same guide inside the source viewport.
+Routine view-save and Settings confirmations use a neutral one-row indicator
+immediately above the main panel and disappear after three seconds. They do not
+change its title, size or position. With no room above, confirmations use neutral
+contextual text, or one native informational notification if a details panel is
+unavailable. Storage failures and diagnostics stay inspectable below. Minimal
+hides routine status unless its presentation enables it.
 
 | View | Default information density |
 | --- | --- |
@@ -60,8 +65,18 @@ their existing information policy.
 | Minimal | A borderless path strip, or a small selected-item neighborhood, with horizontal margins and no routine help/title. |
 
 Partial last pages retain their allocated row slots so navigation does not
-resize the main panel. Search adds its query row. Inputs, reviews and requested
-Results content retain the space needed for their facts.
+resize the main panel. Search adds its query row. Different scenes can use
+different footprints: dense text inputs reserve their prompt and editing row;
+choice inputs reserve a page of options. Filtering and selection keep the same
+choice geometry. Reviews and requested Results content retain the space needed
+for their facts.
+
+History reserves a border inside its source window and shows that buffer in an
+inset native view. Number/sign columns, folds and text stay inside the frame in
+all densities. Leaving or suspending History removes that view and returns to
+the unchanged original editor window; it does not add whitespace to the file.
+Sources smaller than three rows or columns cannot fit this frame; History
+reports the limitation instead of placing a border over the source text.
 
 ### Text and color roles
 

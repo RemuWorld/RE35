@@ -3,6 +3,7 @@
 local M = {}
 local ns = vim.api.nvim_create_namespace('CommandTreeGuide')
 local Keys = require('command_tree.session.key_guide')
+local guide_width, padding = 30, 1
 
 local function close(V, view)
   if not view.guide then return true end
@@ -29,30 +30,71 @@ local function role(name, groups)
     muted = 'CommandTreeMuted' })[name]
 end
 
-local function hint_rows(V, source, scroll, groups)
-  -- Unknown adapter prose remains below. Parse only the already supported
-  -- built-in grammar instead of guessing where custom text contains keys.
-  local hints = Keys.help_hints(source.help)
-  if not hints then return nil end
+local function hints_for(source, scroll)
+  -- Typed controls retain the actual configured keys. Unknown adapter prose
+  -- remains below; only the established built-in help grammar is parsed.
+  local supplied = source.hints
+  if supplied == nil then supplied = Keys.help_hints(source.help) end
+  if type(supplied) ~= 'table' then return nil end
+  local count = 0
+  for index in pairs(supplied) do
+    count = count + 1
+    if count > 32 or type(index) ~= 'number' or index < 1 or index % 1 ~= 0 then return nil end
+  end
+  if count == 0 or count ~= #supplied then return nil end
+  local hints = {}
+  for _, hint in ipairs(supplied) do hints[#hints + 1] = hint end
   if scroll then
     if type(scroll) ~= 'table' or type(scroll.key) ~= 'string' or type(scroll.label) ~= 'string' then return nil end
     local found = false
     for _, hint in ipairs(hints) do
-      if hint.key == Keys.hint_key(scroll.key) and hint.label == scroll.label then found = true end
+      if type(hint) == 'table' and type(hint.key) == 'string'
+        and Keys.hint_key(hint.key) == Keys.hint_key(scroll.key) and hint.label == scroll.label then found = true end
     end
     if not found then hints[#hints + 1] = scroll end
   end
   if #hints > 32 then return nil end
-  local ordered, buckets, key_width, label_width = {}, {}, 0, 0
+  return hints
+end
+
+-- Wrap descriptions by display cells, retaining every character of long words
+-- and Unicode labels. Key chords never pass through this wrapping function.
+local function wrap_label(V, label, width)
+  local rows, current = {}, ''
+  local function emit()
+    rows[#rows + 1], current = current, ''
+  end
+  for word in label:gmatch('%S+') do
+    local separator = current ~= '' and ' ' or ''
+    if V.width(current .. separator .. word) <= width then current = current .. separator .. word
+    else
+      if current ~= '' then emit() end
+      for char in word:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
+        if V.width(current .. char) > width then emit() end
+        current = current .. char
+      end
+    end
+  end
+  if current ~= '' then emit() end
+  return rows
+end
+
+local function hint_rows(V, source, scroll, groups)
+  local hints = hints_for(source, scroll)
+  if not hints then return nil end
+  local ordered, buckets, key_width = {}, {}, 0
+  local inner_width = guide_width - padding * 2
   for _, hint in ipairs(hints) do
-    if type(hint.key) ~= 'string' or type(hint.label) ~= 'string'
+    if type(hint) ~= 'table' or type(hint.key) ~= 'string' or type(hint.label) ~= 'string'
+      or hint.key == '' or not hint.label:find('%S')
       or #hint.key > 128 or #hint.label > 256 or hint.key:find('[\r\n\t%z]')
-      or hint.label:find('[\r\n\t%z]') then return nil end
+      or hint.label:find('[\r\n\t%z]') or hint.group ~= nil and type(hint.group) ~= 'string' then return nil end
     local category = hint.group or 'information'
     if not buckets[category] then buckets[category] = {}; ordered[#ordered + 1] = category end
     local key = Keys.hint_key(hint.key)
+    if V.width(key) > inner_width then return nil end
     buckets[category][#buckets[category] + 1] = { key = key, label = hint.label }
-    key_width, label_width = math.max(key_width, V.width(key)), math.max(label_width, V.width(hint.label))
+    key_width = math.max(key_width, V.width(key))
   end
   local rows, marks = {}, {}
   local function line(text, spans)
@@ -68,12 +110,23 @@ local function hint_rows(V, source, scroll, groups)
       or 'Information'
     line(heading, { { 0, #heading, role('normal', groups) } })
     for _, hint in ipairs(buckets[category]) do
-      local key = hint.key .. string.rep(' ', key_width - V.width(hint.key)) .. '  '
-      line(key .. hint.label, { { 0, #hint.key, role('accent', groups) },
-        { #key, #key + #hint.label, role('normal', groups) } })
+      -- A wide remapped chord gets its own row, so it cannot squeeze its
+      -- description into a thin column or change this panel's fixed width.
+      local inline = inner_width - key_width - 2 >= 8
+      local indent = inline and key_width + 2 or 2
+      local labels = wrap_label(V, hint.label, inner_width - indent)
+      if not inline then line(hint.key, { { 0, #hint.key, role('accent', groups) } }) end
+      for label_index, label in ipairs(labels) do
+        local first = inline and label_index == 1
+        local prefix = first and hint.key .. string.rep(' ', indent - V.width(hint.key))
+          or string.rep(' ', indent)
+        local spans = { { #prefix, #prefix + #label, role('normal', groups) } }
+        if first then spans[#spans + 1] = { 0, #hint.key, role('accent', groups) } end
+        line(prefix .. label, spans)
+      end
     end
   end
-  return rows, marks, math.max(20, key_width + label_width + 4)
+  return rows, marks, guide_width
 end
 
 local function report(view, placement, reason)
@@ -89,9 +142,10 @@ function M.prepare(V, view, data, opts, source, groups)
   local fixed, model = opts._fixed_panel, opts.presentation
   local density = model and model.layout.density or opts.density or 'full'
   local help = model and model.information.help or not model and density == 'full'
-  if not fixed or density ~= 'full' or not help or type(source.help) ~= 'string' then
+  if not fixed or density ~= 'full' or not help
+    or type(source.help) ~= 'string' and type(source.hints) ~= 'table' then
     remove(V, view)
-    report(view, help and source.help and 'below' or 'hidden')
+    report(view, help and (source.help or source.hints) and 'below' or 'hidden')
     return data
   end
   local scroll = data._panel_scroll_hint or opts._details_hint
@@ -102,19 +156,21 @@ function M.prepare(V, view, data, opts, source, groups)
     return data
   end
   local viewport, border = fixed.viewport, fixed.border
-  local col = fixed.col + fixed.width + border + 1
+  local col = fixed.guide_col or fixed.col + fixed.width + border + 1
   local right = viewport.left + viewport.width
   local bottom = viewport.top + viewport.height
-  -- No truncation: a complete chord and label form one row. If the whole guide
-  -- cannot fit, all hint groups keep the existing below-panel representation.
-  if width > 44 or col + width + border > right or fixed.row + #rows + border > bottom then
+  local row = fixed.row
+  if opts.guide_anchor == 'group' then row = math.max(viewport.top, math.min(row, bottom - #rows - border)) end
+  -- Keep complete controls: labels may add rows, while an impossible chord or
+  -- viewport returns every original group to the existing below-panel path.
+  if col < viewport.left or col + width + border > right or row + #rows + border > bottom then
     remove(V, view)
     report(view, 'below', 'Complete shortcut groups do not fit beside the command panel')
     return data
   end
   local guide = view.guide or {}
   view.guide = guide
-  local config = { relative = 'editor', row = fixed.row, col = col, width = width, height = #rows,
+  local config = { relative = 'editor', row = row, col = col, width = width, height = #rows,
     border = border == 0 and 'none' or model and model.decoration.border or 'rounded', zindex = opts.zindex or 80 }
   if border > 0 then config.title, config.title_pos = ' Keys ', 'left' end
   local ok, reason = pcall(function()

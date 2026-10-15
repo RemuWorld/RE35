@@ -96,16 +96,65 @@ for _, preset in ipairs({ false, true }) do
     for _, row in ipairs(lines(view)) do H.ok(row:find('%S'), density .. ' search full page has no unused bottom rows') end
     V.close(view)
 
-    -- Required input/source scenes keep their complete max-height budget.
+    -- Choice/source scenes reserve a page and their actual required facts.
     data.input, data.label = true, 'Choose the required target'
+    data._input_choice_labels = {}
+    for _, item in ipairs(choices) do data._input_choice_labels[#data._input_choice_labels + 1] = item.name end
     V.draw(view, data, opts)
-    H.eq(16, footprint(view).height, density .. ' input retains the larger reading budget')
+    H.eq(slots + 3, footprint(view).height, density .. ' choice input reserves prompt, query and configured slots')
+    H.eq(true, view.presentation_input_complete, density .. ' choice input retains complete required question/value')
+    local input_geometry = footprint(view)
+    data.selected, data.query, data.query_text, data.query_cursor = 13, 'Choice 13', 'Choice 13', 9
+    V.draw(view, data, opts)
+    H.eq(input_geometry, footprint(view), density .. ' choice selection and filter text preserve its footprint')
+    data.items, data.selected = { choices[13] }, 1
+    V.draw(view, data, opts)
+    H.eq(input_geometry, footprint(view), density .. ' a filtered short page keeps the same domain budget')
     V.close(view)
-    data.input, data.label, data.target = nil, nil, 'src/main.cpp'
+    data.input, data.label, data.target, data.items = nil, nil, 'src/main.cpp', choices
     V.draw(view, data, opts)
-    H.eq(16, footprint(view).height, density .. ' source identity retains the larger reading budget')
+    H.eq(slots + 3, footprint(view).height, density .. ' source identity adds its required row to the page')
+    H.eq(true, view.presentation_facts_complete, density .. ' source identity remains complete')
+    V.close(view)
+
+    data = { path = '\\ Input', input = true, label = 'Target configuration (1/1)',
+      items = { { key = '>', name = 'Debug', editing_text = 'Debug', editing_cursor = 5 } } }
+    V.draw(view, data, opts)
+    H.eq(3, footprint(view).height, density .. ' text input reserves path, prompt and one edit row')
+    H.eq(true, view.presentation_input_complete, density .. ' compact text input retains its required facts')
+    local editor_geometry = footprint(view)
+    data.items[1].editing_text, data.items[1].editing_cursor = string.rep('long 한글 ', 20), 80
+    data.message = 'Validation failed'
+    V.draw(view, data, opts)
+    H.eq(editor_geometry, footprint(view), density .. ' typing, caret movement and validation cannot resize the editor')
+    H.ok(text(view.details):find('Validation failed', 1, true), density .. ' editor errors remain inspectable')
+    V.close(view)
+
+    data.review, data.content = true, { 'Before: old', 'After: new' }
+    V.draw(view, data, opts)
+    H.eq(16, footprint(view).height, density .. ' explicit review keeps its larger reading budget')
+    H.eq(true, view.presentation_review_complete, density .. ' review facts retain existing admission')
     V.close(view)
   end
+end
+
+-- Required labels are wrapped and included in the structural budget. A choice
+-- with a long name reserves its extra lines on every filtered page.
+for _, density in ipairs({ 'compact', 'minimal' }) do
+  local opts = options(density, true)
+  local slots = density == 'compact' and 6 or 3
+  local long = string.rep('Long target ', 10)
+  local data = { path = '\\ Input', input = true, label = string.rep('Required prompt ', 5), selected = 1,
+    items = { { name = long }, { name = 'Short' } }, _input_choice_labels = { long, 'Short' } }
+  V.draw(view, data, opts)
+  local initial = footprint(view)
+  H.ok(initial.height > slots + 2 and initial.height < 16, density .. ' wraps static required text without always taking max height')
+  H.eq(true, view.presentation_input_complete, density .. ' wrapped question and selected value remain complete')
+  data.items, data.selected = { { name = 'Short' } }, 1
+  V.draw(view, data, opts)
+  H.eq(initial, footprint(view), density .. ' filtering away the longest choice preserves geometry')
+  H.eq(true, view.presentation_input_complete, density .. ' the filtered choice stays admitted')
+  V.close(view)
 end
 
 -- Explicit rows, custom chrome and spacing each account for actual body rows.
@@ -256,4 +305,80 @@ audit(view, 'resized main')
 if view.details then audit(view.details, 'resized details') end
 V.close(view)
 for _, win in ipairs(vim.api.nvim_list_wins()) do H.eq('', vim.api.nvim_win_get_config(win).relative, 'No popup survives complete teardown') end
+
+-- The actual runtime theme picker receives the stable unfiltered domain from
+-- the Session presenter. Filtering and previewing cannot change its footprint.
+local Session, session = require('command_tree.session')
+local construct = Session.new
+Session.new = function(services) session = construct(services); return session end
+local CE, Profile, Keys = require('re35'), require('command_tree.profile'), require('command_tree.keys')
+local function keys(value) for _, key in ipairs(Keys.tokens(value)) do session:handle(key) end end
+vim.o.columns, vim.o.lines = 120, 42
+vim.cmd.colorscheme('default')
+for _, density in ipairs({ 'compact', 'minimal' }) do
+  local profile = Profile.empty()
+  profile.presentation = { version = 1, selected = density, presets = {} }
+  CE.setup({ profile = { path = false, data = profile }, usage = { path = false }, preferences = { path = false },
+    theme = { persist = false }, auto = false, operator_help = false, triggers = {},
+    providers = { builtin = false, plugins = true, lsp = false, runner = false, native = false, keymaps = false, ex = false },
+    window = { layout = 'fixed', width = 52, max_width = 72, max_height = 16, compact_rows = 6, minimal_rows = 3 } })
+  H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+  local state, slots = session.active, density == 'compact' and 6 or 3
+  H.eq('input', state.mode, 'The real theme command opens its ordinary input scene')
+  H.ok(#state.input.all_choices > 1, 'Actual installed runtime colorschemes populate the picker')
+  H.eq(slots + 2, footprint(state.view).height, density .. ' actual theme input uses only its prompt and page slots')
+  local initial, input = footprint(state.view), state.input
+  keys('<Down>')
+  H.eq(initial, footprint(state.view), density .. ' actual theme preview selection preserves geometry')
+  keys('/')
+  local filtering = footprint(state.view)
+  H.eq(initial.height + 1, filtering.height, 'Entering the filter scene reserves exactly its query row')
+  keys('d')
+  H.eq(filtering, footprint(state.view), density .. ' actual filtered results keep the same page budget')
+  keys('e')
+  H.eq(filtering, footprint(state.view), density .. ' editing the real filter cannot resize or move the input')
+  H.ok(state.input == input, 'Filtering preserves the exact live input owner')
+  H.eq(true, state.view.presentation_input_complete, 'Real theme filtering preserves required input admission')
+  H.eq(0, #CE.operations(), 'Browsing and previewing never confirms a theme operation')
+  CE.close()
+  H.eq('default', vim.g.colors_name, 'Closing the picker rolls back its real theme preview')
+end
+-- Actual Results filtering retains the unfiltered target domain, including
+-- when no result is selected. Required identity text still names only the
+-- actual selected result; the private domain is a sizing reference.
+local result_folder = H.tempdir('fixed-result-domain')
+vim.fn.setqflist({
+  { filename = result_folder .. '/short.cpp', lnum = 1, col = 1, text = 'Short result' },
+  { filename = result_folder .. '/' .. string.rep('long-target-segment/', 5) .. 'target.cpp',
+    lnum = 2, col = 3, text = 'Long result' },
+}, 'r')
+for _, density in ipairs({ 'compact', 'minimal' }) do
+  local profile = Profile.empty()
+  profile.presentation = { version = 1, selected = density, presets = {} }
+  CE.setup({ profile = { path = false, data = profile }, usage = { path = false }, preferences = { path = false },
+    auto = false, operator_help = false, triggers = {}, integrations = { theme = false },
+    providers = { builtin = false, plugins = false, lsp = false, runner = false, native = false, keymaps = false, ex = false },
+    window = { layout = 'fixed', width = 52, max_width = 72, max_height = 16 } })
+  H.ok(CE.open({ workspace = 'results', workspace_data = { source = 'quickfix' }, interactive = false }))
+  local state = session.active
+  local frame = state.stack[#state.stack]
+  H.eq(2, #frame.data.items, 'Native quickfix populates both source identities')
+  local short_target, initial = frame.data.items[1].detail, footprint(frame.view)
+  keys('<Down>')
+  H.eq(initial, footprint(frame.view), density .. ' selecting the longer source preserves geometry')
+  keys('<Up>f')
+  local filtering = footprint(frame.view)
+  H.eq(initial.height + 1, filtering.height, 'Results filter entry adds exactly its query row')
+  keys('short')
+  H.eq(1, #frame.data.items)
+  H.eq(short_target, frame.data.items[1].detail, 'The actual selected source identity is unchanged')
+  H.eq(filtering, footprint(frame.view), density .. ' filtering away the longest target preserves geometry')
+  H.eq(true, frame.view.presentation_facts_complete, 'The actual short source remains completely readable')
+  keys('missing')
+  H.eq(0, #frame.data.items)
+  H.eq(filtering, footprint(frame.view), density .. ' a no-match filter retains the same source budget')
+  H.eq(nil, frame.view.presentation_facts_complete, 'No-match results do not invent a selected source identity')
+  CE.close()
+end
+Session.new = construct
 print('FIXED PANELS: ' .. H.checks .. ' checks passed')

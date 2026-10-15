@@ -5,7 +5,7 @@ inside a usable command environment. This inventory describes behavior rather
 than counting registered command names. A discovered name does not establish
 support for every argument, range, completion rule or recovery path.
 
-This inventory describes RE35 0.2.2.
+This inventory describes RE35 0.2.3.
 0.2.0 adds Getting started (`help.open`), integration diagnostics
 (`help.integrations`) and the native Editor return destination (`workspace.editor`).
 See [compatibility](compatibility.md) for host scope and limitations, and
