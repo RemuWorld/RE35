@@ -2,6 +2,7 @@
 local K = require("command_tree.keys")
 local Index = require("command_environment.core.index")
 local U = require("command_environment.core.util")
+local Descriptor = require("command_environment.core.command_descriptor")
 local M, Registry = {}, {}
 Registry.__index = function(self, key)
   if Registry[key] ~= nil then return Registry[key] end
@@ -66,12 +67,28 @@ end
 -- This root table is constructed here with known string keys. Validate/copy
 -- its values once without allocating another root or a traversal set when
 -- all projected metadata is scalar; nested data keeps the complete checks.
-local function metadata_data(value)
+local function metadata_data(value, command)
+  local arguments = value.arguments
+  value.arguments = nil
   local budget = { count = 1 }
   for key, item in pairs(value) do
     budget.count = budget.count + 1
     assert(budget.count <= 100000, 'Data exceeds depth/item limits')
     value[key] = data(item, nil, 1, budget)
+  end
+  if arguments ~= nil then
+    local function append(fields)
+      local remaining = { count = budget.count + 1 } -- The new arguments key.
+      local ok, copied = pcall(data, fields, nil, 1, remaining)
+      if ok then value.arguments = copied end
+      return ok
+    end
+    -- Discovery data must not impose a new quota on native behavior. If static
+    -- choices/defaults exceed the model budget, keep the structural schema. An
+    -- exceptionally large schema can remain host-owned as a final fallback.
+    if not append(arguments) and not (command and append(Descriptor.project_arguments(command.arguments, true))) then
+      if budget.count + 4 <= 100000 then value.host_fields = U.array({ 'arguments' }) end
+    end
   end
   return value
 end
@@ -96,10 +113,7 @@ local function annotate(command, link)
   end
 end
 local function reindex(self, command)
-  self._index:register(metadata_data({ id = command.id, name = command.name, description = command.description,
-    aliases = command.aliases, provider = command.provider, source = command.source, type = command.type,
-    icon = command.icon, session_action = command.session_action, workspace = command.workspace,
-    hidden = command.hidden, replace = true }))
+  self._index:register(metadata_data(Descriptor.project(command, { replace = true }), command))
 end
 function M.new(opts)
   local self = setmetatable({ _index = Index.new(), _commands = {}, _command_links = {}, _command_link_bases = {} }, Registry)
@@ -172,27 +186,7 @@ function Registry:register(spec)
   end
   local targets = (spec.run and 1 or 0) + (spec.workspace and 1 or 0) + (spec.session_action and 1 or 0)
   assert(targets == 1, "Choose exactly one command execution target: run, workspace, or session_action; use group() for namespaces")
-  if spec.arguments ~= nil then
-    array(spec.arguments, "Command arguments")
-    local names = {}
-    for _, field in ipairs(spec.arguments) do
-      assert(type(field) == "table", "Argument must be a field specification")
-      nonempty(field.name, "Argument name")
-      assert(not names[field.name], "Duplicate argument name: " .. field.name)
-      names[field.name] = true
-      assert(field.kind == nil or vim.tbl_contains({ "text", "path", "number", "select", "multiselect", "boolean" }, field.kind), "Unknown argument kind")
-      assert(field.validate == nil or type(field.validate) == "function", "Argument validate must be a function")
-      assert(field.items == nil or type(field.items) == "table" or type(field.items) == "function", "Argument items must be a table or function")
-      assert(field.required == nil or type(field.required) == "boolean", "Argument required must be a boolean")
-      assert(field.completion == nil or type(field.completion) == "string" or type(field.completion) == "function", "Argument completion must be a string or function")
-      for _, flag in ipairs({ "integer", "secret", "history" }) do assert(field[flag] == nil or type(field[flag]) == "boolean", "Argument " .. flag .. " must be a boolean") end
-      for _, bound in ipairs({ "min", "max" }) do
-        local value = field[bound]
-        assert(value == nil or (type(value) == "number" and value == value and math.abs(value) < math.huge), "Argument " .. bound .. " must be a finite number")
-      end
-      assert(not field.min or not field.max or field.min <= field.max, "Argument min must not exceed max")
-    end
-  end
+  Descriptor.validate_arguments(spec.arguments)
   assert(spec.available == nil or type(spec.available) == "function" or type(spec.available) == "boolean",
     "Command available must be a function or boolean")
   if spec.aliases ~= nil then array(spec.aliases, "Command aliases") end
@@ -212,9 +206,7 @@ function Registry:register(spec)
   assert(command.description == nil or type(command.description) == "string", "Command description must be a string")
   local base = self._command_links[id] and presentation(command) or nil
   annotate(command, self._command_links[id])
-  local metadata = metadata_data({ id = id, name = command.name, description = command.description, aliases = command.aliases,
-    provider = command.provider, source = command.source, type = command.type, icon = command.icon,
-    session_action = command.session_action, workspace = command.workspace, hidden = command.hidden, path = parts, replace = replace })
+  local metadata = metadata_data(Descriptor.project(command, { path = parts, replace = replace }), command)
   local detached = {}
   local function remember(alias)
     local owner = self._index:alias_owner(alias)

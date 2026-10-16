@@ -236,14 +236,17 @@ local route_before,route_after=recovery_route(false),recovery_route(true)
 check(route_before.actions-route_after.actions==2,'Targeted Apply removes exactly the observed Down/Enter Return navigation')
 print('backend recovery route comparison: '..vim.json.encode({before=route_before,after=route_after,human_timing=false}))
 
--- A successful Settings edit can survive a changed source; recovery cannot.
+-- Read-only Return survives source edits, but dormant query execution does not.
 setup();open_recovery('search.project_text','needle');choose_backend('project_search','builtin')
 vim.api.nvim_buf_set_lines(buf,0,1,false,{'edited before backend Apply'})
 key('a')
-check(session.active.mode=='workspace' and frame().id=='settings' and CE.profile().adapters.project_search=='builtin',
-  'A changed source keeps successful explicit Settings Apply in Settings')
-check(frame().data.message:find('document changed',1,true) and operation_count()==0,
-  'A changed source explains refused automatic Return and never runs a search')
+check(session.active.mode=='inspect' and CE.profile().adapters.project_search=='builtin',
+  'A changed source permits successful Settings Apply and read-only Return')
+check(session.active.ctx.changedtick==vim.api.nvim_buf_get_changedtick(buf) and operation_count()==0,
+  'Read-only Return refreshes the source without running a search')
+key('<CR>')
+check(session.active.mode=='inspect' and session.active.message:find('document changed',1,true) and operation_count()==0,
+  'Explicit Enter still refuses a dormant query whose original source changed')
 vim.api.nvim_buf_set_lines(buf,0,-1,false,original_text)
 
 local function refused_apply_return(change, expected)
@@ -256,8 +259,6 @@ local function refused_apply_return(change, expected)
 end
 refused_apply_return(function()vim.api.nvim_buf_set_name(buf,folder..'/renamed.cpp')end,'filename changed')
 vim.api.nvim_buf_set_name(buf,folder..'/src/main.cpp')
-refused_apply_return(function()vim.fn.delete(folder..'/CMakeLists.txt')end,'Project root changed')
-vim.fn.writefile({'project marker'},folder..'/CMakeLists.txt')
 refused_apply_return(function()
   CE.register({id='file.find',replace=true,backend='telescope',run=function()error('Replacement must not execute')end})
 end,'original command changed')
@@ -292,7 +293,28 @@ check(session.active.mode=='workspace' and frame().id=='settings' and operation_
 check(session.active.message:find('original command changed',1,true) and frame().data.message==session.active.message,
   'Delayed descriptor drift is visible in Settings and explains why original Details were not restored')
 
--- Each recovery guard is exercised through the production Session hook.
+-- Inspection ignores execution-only drift while retaining valid source identity.
+local function allowed_return(change)
+  setup();open_recovery('file.find')
+  change()
+  return_row()
+  check(session.active.mode=='inspect' and session.active.inspected_id=='file.find' and operation_count()==0,
+    'Execution-only drift does not block read-only Return')
+  check(session.active.ctx.changedtick==vim.api.nvim_buf_get_changedtick(buf), 'Read-only Return captures the current source revision')
+end
+allowed_return(function()vim.api.nvim_buf_set_lines(buf,0,1,false,{'edited during Settings'})end)
+vim.api.nvim_buf_set_lines(buf,0,-1,false,original_text)
+allowed_return(function()vim.api.nvim_win_set_cursor(win,{1,3})end)
+allowed_return(function()vim.bo[buf].filetype='text'end)
+allowed_return(function()vim.fn.delete(folder..'/CMakeLists.txt')end)
+vim.fn.writefile({'project marker'},folder..'/CMakeLists.txt')
+allowed_return(function()check(CE.set_slot(3,'file.find'),'External profile change succeeds independently')end)
+allowed_return(function()CE.bind('zz','file.find')end)
+allowed_return(function()
+  CE.register({id='file.find',replace=true,backend='telescope',run=function()error('Replacement must never execute during Return')end})
+end)
+
+-- Source identity, bounded data and live-frame ownership remain mandatory.
 local function rejection(change, expected)
   setup();open_recovery('file.find')
   local current=frame().data.backend_recovery
@@ -301,17 +323,8 @@ local function rejection(change, expected)
   check(session.active.mode=='workspace' and session.active.message:find(expected,1,true), 'Recovery rejects '..expected)
   check(operation_count()==0, 'Rejected recovery executes no command')
 end
-rejection(function()vim.api.nvim_buf_set_lines(buf,0,1,false,{'edited during Settings'})end,'document changed')
-vim.api.nvim_buf_set_lines(buf,0,-1,false,original_text)
 rejection(function()vim.api.nvim_buf_set_name(buf,folder..'/renamed.cpp')end,'filename changed')
 vim.api.nvim_buf_set_name(buf,folder..'/src/main.cpp')
-rejection(function()vim.fn.delete(folder..'/CMakeLists.txt')end,'Project root changed')
-vim.fn.writefile({'project marker'},folder..'/CMakeLists.txt')
-rejection(function()check(CE.set_slot(3,'file.find'),'External profile change succeeds independently')end,'Settings or command paths changed')
-rejection(function()CE.bind('zz','file.find')end,'Settings or command paths changed')
-rejection(function()
-  CE.register({id='file.find',replace=true,backend='telescope',run=function()error('Replacement must never execute during recovery')end})
-end,'original command changed')
 rejection(function()key('<C-w>');key('<Esc>')end,'navigation changed')
 rejection(function(receipt)receipt.context.win=win+99999 end,'original command context changed')
 rejection(function(receipt)receipt.origin.query=function()end end,'recovery data is invalid')
@@ -322,6 +335,15 @@ CE.register({id='search.project_text',replace=true,backend='builtin',run=functio
 key('<CR>')
 check(session.active.mode=='inspect' and session.active.message:find('changed after recovery',1,true)
   and operation_count()==0 and replaced_calls==0,'A replaced handler cannot consume dormant query or execute after recovery')
+
+setup();open_recovery('search.project_text','needle')
+local before_return_calls=0
+CE.register({id='search.project_text',replace=true,backend='telescope',run=function()before_return_calls=before_return_calls+1 end})
+return_row()
+check(session.active.mode=='inspect' and operation_count()==0, 'Manual Return may inspect a replacement without granting it a dormant query')
+key('<CR>')
+check(session.active.mode=='inspect' and session.active.message:find('changed after recovery',1,true)
+  and operation_count()==0 and before_return_calls==0, 'A replacement before Return cannot inherit dormant query execution')
 
 setup();open_recovery('search.project_text','needle');choose_backend('project_search','builtin');key('a')
 vim.api.nvim_buf_set_lines(buf,0,1,false,{'changed after Return'})

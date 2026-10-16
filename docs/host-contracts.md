@@ -191,9 +191,9 @@ system. The following shared rules support host-owned workflows:
 | Cancellation | Outcome data cannot itself prove exit | Default direct execution confirms only the launched process. An explicitly configured optional helper owns a Windows Job or Linux group, with observed scoped termination and explicit detached-process exclusions. See [process ownership](development/process-ownership.md). |
 | Presentation | Versioned bounded declarations, typed edits/file codec, resolution and capability negotiation | Neovim owns terminal rendering; VS Code owns native controls and reports unsupported geometry/style. Both have reviewed appearance authoring/sharing; workflow ownership and review permissions remain separate. See the [presentation contract](development/presentation-contract.md). |
 
-The optional native loader and installed source manifest currently list 17 core
-modules, including `presentation_edit`. A helper built for an earlier manifest
-must be rebuilt for that manifest. Neovim calls pure Lua in-process; the optional
+The optional native loader uses the installed core source manifest. A helper
+built for an earlier manifest must be rebuilt when that manifest changes.
+Neovim calls pure Lua in-process; the optional
 desktop host uses Protocol 1 / C ABI 1. Neither transport changes the common
 coordinate, validation or data-only authority semantics.
 

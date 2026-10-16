@@ -244,8 +244,10 @@ rounded, single and double. Colors use `#RRGGBB`. Configuration and shared-file
 size each have a 64 KiB ceiling, including the shared envelope for a file.
 
 In Lua or JSON, `extends = false` / `"extends": false` selects the standalone
-factory root. Older local placements such as `left` remain valid in the legacy
-renderer; preset rendering uses center as the inherited fallback and reports it.
+factory root. Older local placements such as `left` retain their historical host
+placement through the internal compatibility model; explicit presets inherit
+center as the unsupported-placement fallback and report it. Both use the same
+renderer without rewriting local preferences or saved profiles.
 An explicit preset position takes precedence.
 
 Imports require bounded UTF-8 JSON with known fields and types. Duplicate fields,

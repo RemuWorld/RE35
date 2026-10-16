@@ -78,6 +78,8 @@ local function prepare_environment(opts, pending)
     local action = ({ detail = "density" })[name] or name
     reserved.global[options.keys[name]] = (name == "close" or name == "execute") and true or { session_action = action }
   end
+  -- Paging changes selection only; it never resolves to a command action.
+  reserved.global[options.keys.page_down], reserved.global[options.keys.page_up] = true, true
   if options.quick_slots then for i = 1, 9 do reserved.root[tostring(i)] = true end end
   registry:set_reserved(reserved)
   local preferences = require("command_tree.preferences").new(options.preferences)

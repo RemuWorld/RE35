@@ -1,4 +1,4 @@
-*command-environment*  RE35 Command Environment 0.2.3 for Neovim
+*command-environment*  RE35 Command Environment 0.3.0 for Neovim
 
 SETUP                                                   *ce-setup*
 
@@ -25,7 +25,7 @@ sources and inconsistent replacement plans are rejected; the host owns review
 authorization and retains the reviewed arguments or plan.
 See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
 The optional VS Code host supports a subset of the Neovim environment.
-Version 0.2.3. See docs/compatibility.md for host support and known limitations.
+Version 0.3.0. See docs/compatibility.md for host support and known limitations.
 
 OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
 
@@ -56,7 +56,13 @@ NEOVIM USABILITY                                        *ce-0.2*
 0.2.0 remembers confirmed builtin themes across editor restarts;
 theme.persist = false keeps session-only changes. Preview never saves. Supplied
 custom theme adapters retain their own storage and startup responsibility.
-See |ce-integration-theme|.
+See |ce-integration-theme| for theme adapter configuration.
+The builtin theme picker shows Light/Dark, automatic preview and whether Enter
+will save for startup or apply for this session. Ctrl-b switches appearance;
+Ctrl-t toggles automatic preview outside filter editing. Enter confirms the
+selected theme and appearance; Esc restores both. :set background changes the
+editor only until a theme is explicitly confirmed here. Storage failures remain
+visible and do not claim a successful save.
 
 Single Up/Down selection wraps by default; navigation.wrap = false clamps it.
 Page/output scrolling and text editing do not wrap. The main command panel
@@ -66,9 +72,24 @@ Back returns to the same input. Minimal keeps a small borderless entry view.
 window.layout = "dynamic" selects the prior content-sized layout.
 
 Open Getting started with \sg, integration diagnostics with \sv, or use
-:checkhealth re35. Select Editor in Workspaces to close RE35 and return to the
-original native editing window. Draft, Saved, Session only and failed storage
-states distinguish actual persistence; integrations are never auto-installed.
+:checkhealth re35. Leave any active workspace, then select Editor in Workspaces
+to suspend command navigation and return to the native editing window. The next
+plain \ entry resumes navigation with the current editor context. Old forms and
+reviews are discarded; select the command again to restore nonsecret drafts and
+enter secrets afresh. Ctrl-c, the Close key, and require('re35').close() dispose
+the session. Submitted background tasks retain their own lifetime.
+If Editor was chosen from the workspace selector, resuming returns to that
+selector; press Esc to return to the preceding command tree.
+
+require('re35').suspend() and require('re35').resume() expose the same
+transitions. Pass {interactive=false} to resume() for scripted control.
+state() distinguishes active, suspended and surface_attached. All active
+workspaces must be left before suspension; they are not silently discarded.
+A failed final cleanup returns false and leaves
+cleanup_pending/cleanup_error for another close() attempt, without input authority.
+
+Draft, Saved, Session only and failed storage states distinguish actual
+persistence; integrations are never auto-installed.
 
 COMPLETION AND COMMAND STATUS                            *ce-status* *ce-v5.1*
 
@@ -148,6 +169,7 @@ KEYS                                                    *ce-keys*
   Ctrl-l            Command words mode: ID, alias or configured word path.
   Ctrl-h            Inspect selected command, provider, arguments and reason.
   Up/Down           Select an item.
+  PageUp/PageDown   Move one visible page in selectable lists; clamp at ends.
   Enter/Right       Accept the selected item, outside editable fields.
   1..9              User-assigned root slots; never automatically reordered.
 
@@ -160,6 +182,9 @@ Native Key Guide retains mapped arrow/Space behavior. Elsewhere Space does not
 execute a command. It remains a literal space in editable fields and a toggle
 in multiselect. Search, words and filter fields retain Left/Right caret movement
 and Backspace deletion; Esc leaves that input instead.
+Moving only the search caret preserves the selected command. A changed ordered
+result list resets selection; removed commands cannot remain selected.
+keys.page_up/page_down remap paging. Ctrl-d/u keep text-editing behavior.
 
 Input fields: Enter accepts; Esc returns to the previous field; Ctrl-s skips
 an optional field. Text supports arrows/Home/End, Ctrl-a/e, Ctrl-u/w, BS/Del,
@@ -347,6 +372,7 @@ Hooks receive (frame,ctx,session,options), except handle receives
 UI views/timers belong to frame lifecycle; jobs belong to their backend.
 Pushing suspends the previous frame; Esc pops and resumes it; closing leaves
 all frames without resuming covered ones. Hook failures are isolated/reported.
+These frame hooks cover stacking; Editor suspension requires leaving all frames.
 Reopening the current workspace does not duplicate its stack entry. A workspace
 chosen from the selector returns to that selector on Back, retaining selection
 and filter; leaving the selector restores its previous caller.
@@ -378,7 +404,7 @@ is rejected. A selected sequence is remembered per buffer in bounded memory,
 but reopening History never automatically restores a state. The list refreshes
 after restore. history.timeline_stay_open=false exits Timeline after restore;
 history.position overrides placement. require('re35').version is
-'0.2.3'.
+'0.3.0'.
 Tasks uses a theme color; j/k selects, Enter details, Esc returns, x/Ctrl-x
 cancels explicitly; r reruns a completed operation, s returns to its source.
 For failed recipes, c opens owned source Results or relevant step Settings.
@@ -579,6 +605,11 @@ callbacks, runtime buffer/window/job IDs or machine absolute paths. Declared
 secret arguments cannot be saved as presets. Drafts and recent runtime history
 are excluded. Machine tool paths belong in setup.tool_overrides and are not
 exported. Stable command IDs remain distinct from their tree placements.
+Privacy checks reject credential/runtime keys inside preset argument values,
+including nested choice data. A declaration ID or alias such as "token" is
+ordinary metadata. Unknown schema fields, non-JSON values and absolute machine
+paths remain invalid; naming a value differently does not make a secret safe
+to export.
 
 spe exports; spi chooses merge/replace, shows changes/unresolved requirements,
 then requests Apply. Missing references remain stored; import never installs

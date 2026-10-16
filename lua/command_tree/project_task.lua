@@ -93,49 +93,49 @@ local function dirty(root)
   table.sort(records, function(a, b) return a.name < b.name end)
   return records
 end
-local function profile_disk(env)
+local function signature(profile, scope)
+  if not scope then return vim.deepcopy(profile) end
+  local checked, value, why = pcall(scope, profile)
+  if not checked then return nil, reason_text(value) end
+  if value == nil then return nil, reason_text(why) end
+  return value
+end
+local function profile_disk(env, scope)
   if not env.profile_path then return false end
   local value, why = require('command_tree.profile').read(env.profile_path)
   if not value then return nil, 'Cannot verify the saved profile: ' .. tostring(why) end
-  if env.disk_profile and not vim.deep_equal(value, env.disk_profile) then
+  local current, failure = signature(value, scope)
+  if current == nil then return nil, failure end
+  local expected, expected_error
+  if env.disk_profile then expected, expected_error = signature(env.disk_profile, scope) end
+  if env.disk_profile and expected == nil then return nil, expected_error end
+  if env.disk_profile and not vim.deep_equal(current, expected) then
     return nil, 'Profile changed in another editor; reload Settings before rerunning'
   end
-  return value
+  return current
 end
 
--- Data-only snapshots let a finite recipe retain the reviewed source and
--- loaded project buffers between child processes without restoring editor
--- state or inspecting unrelated/nested projects.
+-- Saved-input recipes retain the named source's disk identity, not an
+-- imaginary snapshot of every compiler dependency or every loaded buffer.
 function M.capture(target, ctx)
   if not K.valid(ctx) then return nil, 'The current recipe document is no longer available' end
-  local files, why = dirty(target.root)
-  if not files then return nil, why end
-  local documents = {}
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    if vim.api.nvim_buf_is_valid(buf) and vim.api.nvim_buf_is_loaded(buf) and vim.bo[buf].buftype == '' then
-      local name = vim.api.nvim_buf_get_name(buf)
-      if name ~= '' and inside(name, target.root) and not nested_project(name, target.root) then
-        documents[#documents + 1] = { buf = buf, name = name, stat = stamp(name),
-          tick = vim.api.nvim_buf_get_changedtick(buf), modified = vim.bo[buf].modified }
-        if #documents > 256 then return nil, 'More than 256 project documents are loaded; narrow the recipe context' end
-      end
-    end
-  end
-  table.sort(documents, function(a, b) return a.name < b.name end)
-  return { source = target.file ~= '' and stamp(target.file) or false,
-    tick = vim.api.nvim_buf_get_changedtick(ctx.buf), files = files, documents = documents }
+  local buf = target.file ~= '' and original_buffer(target) or nil
+  return { source = target.file ~= '' and stamp(target.file) or false, source_buf = buf }
 end
 function M.check_snapshot(target, ctx, baseline)
-  local current, why = M.capture(target, ctx)
-  if not current then return false, why end
-  if not vim.deep_equal(current, baseline) then
-    return false, 'Project files changed during the recipe; no next step was started'
+  if not K.valid(ctx) then return false, 'The current recipe document is no longer available' end
+  if baseline.source_buf and vim.api.nvim_buf_is_valid(baseline.source_buf)
+    and not same(vim.api.nvim_buf_get_name(baseline.source_buf), target.file) then
+    return false, 'Original task buffer was renamed; no next step was started'
+  end
+  if not vim.deep_equal(target.file ~= '' and stamp(target.file) or false, baseline.source) then
+    return false, 'Original task file changed on disk during the recipe; no next step was started'
   end
   return true
 end
 
--- The optional dispatch runs only after the same reviewed target, profile,
--- dirty-file and write checks used by ordinary project replay have passed.
+-- The optional dispatch uses the same target/write checks as ordinary replay.
+-- Unknown process commands retain the conservative whole-context policy.
 function M.review(operation, command, env, opts, dispatch)
   opts = opts or {}
   local CE = require('command_tree')
@@ -185,16 +185,38 @@ function M.review(operation, command, env, opts, dispatch)
     return reject('Original task target changed; review the tool in Project')
   end
   if renamed(operation, target) then return reject('Original task buffer was renamed; review the tool in Project') end
-  local files, why = dirty(target.root)
+  local scope = Project.execution_scope(command)
+  local files, why
+  if scope and opts.save == 'saved' then files = {} else files, why = dirty(target.root) end
   if not files then return reject(why) end
-  local disk, disk_error = profile_disk(env)
+  local profile, profile_error = signature(env.profile, scope)
+  if profile == nil then return reject(profile_error) end
+  local disk, disk_error = profile_disk(env, scope)
   if disk == nil then return reject(disk_error) end
-  local baseline = { profile = vim.deepcopy(env.profile), setup = vim.deepcopy(env.setup_opts), disk = disk,
+  local baseline = { profile = profile, setup = vim.deepcopy(env.setup_opts), disk = disk,
     source = target.file ~= '' and stamp(target.file) or false, tick = ctx.changedtick, files = files }
+  local original = { id = operation.id, command_id = operation.command_id, status = operation.status,
+    args = vim.deepcopy(operation.args or {}), revision = operation.process_revision,
+    source_buf = operation.source_buf, buffer = operation.buffer, ctx = vim.deepcopy(operation.ctx) }
   local function guard()
-    if CE.registry() ~= env.registry or env.registry:get(command.id) ~= command
-      or not vim.deep_equal(CE.profile(), baseline.profile) or not vim.deep_equal(env.setup_opts, baseline.setup) then
+    if CE.environment_token() == nil or CE.registry() ~= env.registry or env.registry:get(command.id) ~= command then
       return false, 'Settings or command changed while reviewing; reopen the task'
+    end
+    local current_profile, failure = signature(CE.profile(), scope)
+    if current_profile == nil or not vim.deep_equal(current_profile, baseline.profile)
+      or not scope and not vim.deep_equal(env.setup_opts, baseline.setup) then
+      return false, failure or 'Settings or command changed while reviewing; reopen the task'
+    end
+    if operation.id ~= original.id or operation.command_id ~= original.command_id or operation.status ~= original.status
+      or operation.process_revision ~= original.revision or operation.source_buf ~= original.source_buf
+      or operation.buffer ~= original.buffer or not vim.deep_equal(operation.ctx, original.ctx)
+      or not vim.deep_equal(operation.args or {}, original.args) or not vim.deep_equal(target_for(operation), target) then
+      return false, 'Original task changed while reviewing; reopen the task'
+    end
+    if original.id ~= nil then
+      local retained = false
+      for _, task in ipairs(env.executor:list()) do if task == operation and task.id == original.id then retained = true; break end end
+      if not retained then return false, 'Original task is no longer in retained history; reopen the task' end
     end
     if operation.process_revision and operation.process_revision ~= command.process_revision then
       return false, 'Tool configuration changed; run the new definition from Project after reviewing it'
@@ -208,7 +230,7 @@ function M.review(operation, command, env, opts, dispatch)
       end
     end
     if owner and env.session.active ~= owner then return false, 'Rerun review closed; no task was started' end
-    if not K.valid(ctx) or vim.api.nvim_buf_get_changedtick(ctx.buf) ~= baseline.tick then
+    if not K.valid(ctx) or not scope and vim.api.nvim_buf_get_changedtick(ctx.buf) ~= baseline.tick then
       return false, 'The current document changed while reviewing; reopen the task'
     end
     if K.mode() == 'x' or K.mode() == 's' then return false, 'Leave Visual or Select mode before rerunning a Normal task' end
@@ -228,10 +250,12 @@ function M.review(operation, command, env, opts, dispatch)
         return false, 'Tool working directory changed; review the tool in Project before running it again'
       end
     end
-    local current, failure = dirty(target.root)
-    if not current then return false, failure end
-    if not vim.deep_equal(current, baseline.files) then return false, 'Project files changed while reviewing; reopen the task before saving or running' end
-    local current_disk, disk_failure = profile_disk(env)
+    if not scope then
+      local current, dirty_failure = dirty(target.root)
+      if not current then return false, dirty_failure end
+      if not vim.deep_equal(current, baseline.files) then return false, 'Project files changed while reviewing; reopen the task before saving or running' end
+    end
+    local current_disk, disk_failure = profile_disk(env, scope)
     if current_disk == nil then return false, disk_failure end
     if not vim.deep_equal(current_disk, baseline.disk) then return false, 'Profile changed while reviewing; reload Settings before rerunning' end
     local available, unavailable = env.registry:available(command.id, ctx)
@@ -271,7 +295,24 @@ function M.review(operation, command, env, opts, dispatch)
     for _, item in ipairs(chosen) do
       ok, failure = guard()
       if not ok then return reject(failure) end
+      -- Earlier write hooks may have changed a later selected buffer. Never
+      -- silently save its new contents using consent for the old revision.
+      if not vim.deep_equal(record(item.buf, target.root), item) then
+        return reject('Project file changed before saving: ' .. item.name)
+      end
+      -- Normal BufWritePre hooks may format text, but must not redirect this
+      -- consent to a renamed path or a replaced disk file. Register after the
+      -- existing hooks so the native write is stopped before it reaches disk.
+      local write_guard = vim.api.nvim_create_autocmd('BufWritePre', { buffer = item.buf, once = true,
+        callback = function()
+          if not vim.api.nvim_buf_is_valid(item.buf) or vim.api.nvim_buf_get_name(item.buf) ~= item.name
+            or not vim.deep_equal(stamp(item.name), item.stat) or vim.bo[item.buf].readonly
+            or not vim.bo[item.buf].modifiable or vim.uv.fs_access(item.name, 'W') ~= true then
+            error('Reviewed save target changed in a write hook: ' .. item.name, 0)
+          end
+        end })
       local saved, save_error = pcall(vim.api.nvim_buf_call, item.buf, function() vim.cmd('silent update') end)
+      pcall(vim.api.nvim_del_autocmd, write_guard)
       if not saved then
         if vim.api.nvim_buf_is_valid(item.buf) and not vim.bo[item.buf].modified and stamp(item.name) then
           saved_names[#saved_names + 1] = item.name
@@ -292,7 +333,7 @@ function M.review(operation, command, env, opts, dispatch)
     if not ok then return reject(failure) end
     local run_ctx = vim.deepcopy(ctx)
     run_ctx.changedtick, run_ctx.cursor = vim.api.nvim_buf_get_changedtick(ctx.buf), vim.api.nvim_win_get_cursor(ctx.win)
-    local args = vim.deepcopy(operation.args or {})
+    local args = vim.deepcopy(original.args)
     for _, field in ipairs(command.arguments or {}) do if field.secret then args[field.name] = nil end end
     settled = true
     local safe, accepted, detail, next_operation

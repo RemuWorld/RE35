@@ -25,6 +25,13 @@ function M.resolve(options)
   if options.theme ~= false then
     resolved.theme = callbacks("theme", options.theme or require("command_tree.integrations.themes").new(),
       { "items", "current", "preview", "commit" }, { "available", "restore", "persistence_status" })
+    if resolved.theme.input_ui ~= nil then
+      assert(type(resolved.theme.input_ui) == 'table', 'integrations.theme.input_ui must be a table')
+      for name, callback in pairs(resolved.theme.input_ui) do
+        assert(name == 'init' or name == 'handle' or name == 'status', 'Unknown theme input UI callback: ' .. tostring(name))
+        assert(type(callback) == 'function', 'integrations.theme.input_ui.' .. name .. ' must be a function')
+      end
+    end
   end
   if options.runner ~= nil and options.runner ~= false then
     resolved.runner = callbacks("runner", options.runner, { "available", "build_and_run" }, { "results_items", "show_result" })

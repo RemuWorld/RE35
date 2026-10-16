@@ -10,8 +10,8 @@ are in the [host guide](../../hosts/vscode/README.md). See
 existing pure Follow-up v1 data through the lazily loaded bridge. Five actions
 are `details`, `results`, `recover`, `retry` and `review`. It creates no operation,
 claims no resource and carries no execution permission. Protocol 1, Document
-v1/v2 and C ABI 1 are unchanged. The native source manifest includes all 17
-portable core modules.
+v1/v2 and C ABI 1 are unchanged. The native source manifest lists the portable
+core modules loaded by the helper.
 
 `task-recovery.js` owns private proposal and selection WeakMaps. A menu binds
 the live host/backend, exact retained Task, applied profile object,

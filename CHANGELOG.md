@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.3.0
+
+- Return to the native editor and resume command navigation with a fresh source
+  context. Restore nonsecret drafts without restoring old reviews or permissions.
+- Keep saved-input recipe runs independent of unrelated buffer edits. Recheck
+  relevant tools, targets and files before effects, while keeping Results and
+  other read-only inspection accessible.
+- Use one display model for existing window options and named presets, retaining
+  their layout behavior and checking required review information after resizing.
+- Add Light/Dark selection and an automatic-preview toggle to the builtin theme
+  picker. Confirm the exact theme/appearance pair; cancellation restores both.
+- Add configurable PageUp/PageDown navigation to selectable lists and preserve
+  the selected search result when only the query caret moves.
+- Share command argument rules between the portable core and Neovim, preserving
+  host callbacks and existing profile, document, protocol and ABI contracts.
+
 ## 0.2.3
 
 - Keep source text, number/sign columns and folds inside History's symbolic

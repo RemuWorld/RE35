@@ -40,7 +40,7 @@ H.eq({}, CE.state().workspaces, 'Failed cleanup still releases the popped worksp
 H.eq('tree', CE.state().kind, 'Completed pop restores the actual parent mode')
 H.ok(CE.state().message:find('fixture cleanup failed', 1, true), 'Cleanup failure remains visible after the return')
 
--- The receipt must reject source drift independently of presentation density.
+-- Read-only navigation retains source identity, not an obsolete text revision.
 local Navigation = require('command_tree.session.navigation')
 state = session.active
 state.mode, state.inspected_id = 'inspect', 'file.save'
@@ -48,11 +48,11 @@ local receipt = H.ok(Navigation.capture_settings(state), 'Read-only Inspect rout
 H.ok(Navigation.validate_settings(receipt, state.ctx), 'Unchanged source receipt validates')
 local original_type = vim.bo[state.ctx.buf].filetype
 vim.bo[state.ctx.buf].filetype = 'lua'
-H.eq(nil, Navigation.validate_settings(receipt, state.ctx), 'Receipt refuses changed filetype')
+H.eq('lua', H.ok(Navigation.validate_settings(receipt, state.ctx)).context.filetype, 'Receipt refreshes changed filetype')
 vim.bo[state.ctx.buf].filetype = original_type
 vim.api.nvim_buf_set_lines(state.ctx.buf, 0, -1, false, { 'one', 'two' })
 receipt = H.ok(Navigation.capture_settings(state), 'Capture the new source revision')
 vim.api.nvim_win_set_cursor(state.ctx.win, { 2, 0 })
-H.eq(nil, Navigation.validate_settings(receipt, state.ctx), 'Receipt refuses changed source cursor')
+H.eq({ 2, 0 }, H.ok(Navigation.validate_settings(receipt, state.ctx)).context.cursor, 'Receipt refreshes changed source cursor')
 CE.close(); CE.disable(); Session.new = create
 print('Navigation lifecycle checks: ' .. H.checks)

@@ -32,7 +32,10 @@ function M.prepare(V, data, opts, view)
   if retained and retained.owner == notice and (retained.expired or now() >= retained.deadline) then return copy end
   local model = opts.presentation
   local density = model and model.layout.density or opts.density or 'full'
-  local info = model and model.information
+  -- Local Compact has always shown neutral save confirmations, independently
+  -- of its reduced inline metadata. Only authored presets explicitly control
+  -- this through information.status; normalization must retain that difference.
+  local info = model and not (opts._display and opts._display.source == 'legacy') and model.information or nil
   if density == 'minimal' and not (info and info.status) or info and not info.status then return copy end
   if data.diagnostic or data.error then
     copy.message, copy.message_role = notice.message, 'normal'

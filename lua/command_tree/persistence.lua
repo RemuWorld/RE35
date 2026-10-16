@@ -40,6 +40,8 @@ function M.snapshot(env)
     local value = { owner = owned and 'Theme adapter' or 'Custom theme adapter' }
     if ok and type(status) == 'table' then
       for _, name in ipairs({ 'state', 'scope', 'path', 'theme', 'error' }) do value[name] = text(rawget(status, name)) end
+      local background = rawget(status, 'background')
+      if background == 'light' or background == 'dark' then value.background = background end
       value.enabled = rawget(status, 'enabled') == true
     else value.state, value.error = 'restore_failed', text(ok and 'Invalid theme storage report' or tostring(status)) end
     if not owned and theme.builtin == true and theme.id == 'runtime-colorschemes'

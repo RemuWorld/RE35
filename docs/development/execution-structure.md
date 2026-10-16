@@ -63,7 +63,7 @@ can be synchronous or delayed. A cancellation request is not proof of exit.
 
 | Module | Responsibility | Entry or stages |
 | --- | --- | --- |
-| `session.lua` | Active UI, private shared execution scope, keyboard loop and Session API | `run`, lexical `run_scoped` / `dispatch_submission`, private `execution_scope`, `consume_submission` |
+| `session.lua` | Session coordination, private shared execution scope and Session API | `prepare`, `open`, `run`, lexical `run_scoped` / `dispatch_submission`, private `execution_scope`, `consume_submission` |
 | `session/dispatch.lua` | Command routes and origin-aware UI completion | `run` -> workspace/action/form or `execute`; recipe dispatch and `completion` |
 | `executor.lua` | Command admission, target/argument checks, backend invocation, pending-key ownership and bounded finished history | `execute`, `list`, `cancel`, `force_cancel` |
 | `executor/lifetime.lua` | One admitted operation's completion, input/select requests, cleanup, cancellation and timeout | private `finish`, `request`, `stop_backend`; operation methods and `start_timeout` |
@@ -74,7 +74,40 @@ Input, Navigation and Presenter remain separate Session modules. Project
 selection, Tasks history and Results location ownership stay distinct. Recipe
 Model/Workspace/Recovery responsibilities are not merged into the coordinator.
 
+`session/lifecycle.lua` owns logical identity, suspension, fresh source attachment
+and final disposal. `session/input_driver.lua` owns polling and the leased paste
+hook; `session/input.lua` owns argument forms. Editor detaches the surface while
+retaining safe navigation and nonsecret drafts. Resume does not retain input,
+review, completion or recovery authority. Workspace stacks and native prefix
+replay must finish before suspension. Failed final cleanup retains a disposal-only
+owner for known views; workspace leave hooks are not replayed to retry those views.
+
+Executor prompt/completion callbacks, private Apply scope and workspace API
+closures check the captured attachment. A retired loop cannot close a reattached
+logical state. Late foreign paste wrappers may forward complete, non-streamed
+native pastes (phase -1) only when all RE35 attachments have detached;
+retired stream fragments and any
+attempt to bypass another live attachment are rejected.
+
 ## Boundaries to preserve
+
+`view/model.normalize` converts local window options and negotiated presets to
+one host display model. Its compatibility provenance preserves legacy width,
+row ceilings, placement and spacing without rewriting saved profiles.
+`view/panels.prepare` reserves main/detail regions and pure `view/guide.plan`
+places optional controls. The single `view/presentation.plan` then derives
+content geometry, row costs, page size and all-page review admission. Drawing
+and fresh admission use that calculation; a cached plan does not authorize
+Apply after resize. Mandatory facts stay in the main panel. A failed guide
+retains its below-panel fallback for fresh validation until a normal redraw
+recovers it. `View.draw` remains the public entry; there is no separate legacy
+renderer or critical-scene renderer promotion.
+
+Opt-in native `input_ui` hooks provide a picker draft and bounded status text;
+they are host callbacks, excluded from portable command metadata. Returns are
+bound to the live attachment, descriptor, input and field. Closing, reattaching
+or replacing them during a callback retires its output before preview or draw.
+Picker controls never provide Apply authority; acceptance remains explicit.
 
 - Only the lexical final Apply callback supplies a captured submission. Public
   Run always suspends shared execution authority, even when entered from another
@@ -94,8 +127,10 @@ Model/Workspace/Recovery responsibilities are not merged into the coordinator.
   Parent/child lifetime and cancellation decisions remain with the coordinator.
   Partial child diagnostics and the aggregate limit remain visible.
 - Environment replacement can preserve running Executor jobs. Old invocations
-  retain their admitted usage destination and context; UI receipts do not cross
-  into a replacement environment.
+  retain their admitted usage destination and context. Execution receipts do not
+  cross into a replacement environment. Read-only Task inspection may follow
+  the exact retained operation into the live environment; an ID match alone is
+  insufficient.
 
 ## Recipe integration
 
@@ -111,15 +146,18 @@ Manager methods: `context(ctx, selection)`, `select_root(id, path)`,
 it does not infer the cause of an arbitrary process exit.
 `project_task.review(operation, command, env, options, dispatch?)` preserves
 ordinary rerun behavior. `capture` / `check_snapshot` expose data-only
-source/document checks between child steps.
+source-disk and source-buffer identity checks between child steps. They do not
+snapshot loaded project buffers or claim to freeze compiler dependencies.
 
 Prepare integration registers recipes after ordinary Project commands and
 replaces Project before workspace overrides are configured. Session receives
 the prepared manager; runtime callbacks use `env.session` after preparation.
 Semantic parent commands carry `recipe_id` and request review only when no
-already-reviewed `process_target` is supplied. A new setup must leave the old
-manager bound to its old environment so an already-running pipeline cannot
-dispatch another stage into the replacement registry.
+already-reviewed `process_target` is supplied. A running pipeline retains its
+Executor and parent operation. After environment replacement, a private
+registry-to-manager association admits continuation only through the live
+manager's exact registered parent/child descriptors and an equivalent execution
+plan. The retired manager cannot dispatch a stale callback into the new registry.
 
 Internal `recipe.<recipe>.step.<step>` commands are hidden and accept only the
 authorized pending parent task, exact argv and target. Invoking them independently
@@ -139,9 +177,21 @@ in the portable quick slot; retained retry remains the original task's operation
 One parent runs one owned direct child at a time. Parent/child IDs, ordered step
 states, direct termination scope and locations are data-only snapshots; process
 handles remain on owned operations. A rerun rechecks declaration revision,
-source identity, root markers, disk-profile compare-and-swap, current UI context
+source identity, root markers, relevant disk-profile declarations, current UI context
 and duplicate same-target execution before saving or starting. Direct child exit
 is not evidence that all descendant processes have terminated.
+
+Host registration binds a private execution-scope resolver to trusted Project
+descriptors. Recipe signatures include their project, ordered recipe, effective
+referenced tools and process ownership policy. Appearance, aliases and other
+tools do not invalidate them. Unknown custom commands retain conservative
+whole-context checks; profile policy labels cannot grant a relaxed scope.
+Settings writes retain their separate whole-profile optimistic conflict checks.
+Selected saves validate the entire chosen set before the first write, then each
+record immediately before its write. A final native BufWritePre guard rejects
+path redirection and disk/permission drift after ordinary formatting hooks.
+This is a checked native save, not a sandbox for arbitrary plugin callbacks or
+custom BufWriteCmd side effects. Partial failures report already-saved files.
 
 Original-task recovery receipts live in a weak map keyed by retained operation,
 separate from profile data and workspace memory. Capture copies physical
@@ -161,10 +211,11 @@ ordinary replay evidence remain unchanged.
 ## Backend recovery ownership
 
 The recovery receipt is bounded process-local data. It is excluded from Workspace
-memory and portable export; closing Settings discards it. Before returning,
-the environment checks the original buffer/window, document tick, source name,
-project root, command descriptor, navigation owner, profile and runtime bindings.
-Changes refuse recovery and require reopening the intended command.
+memory and portable export; closing Settings discards it. Navigation-only Return
+checks the original buffer/window/name and bounded navigation owner, then
+refreshes context and availability. Cursor, text and filetype changes alone do
+not block inspection. The dormant query's later explicit Run separately checks
+the original document, root, command, profile, runtime bindings and query.
 
 Replacing a command after Return prevents a dormant query from executing through
 the replacement. A late selector callback from a closed Settings owner cannot

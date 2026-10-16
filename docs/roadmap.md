@@ -7,10 +7,13 @@ explicit host contracts keep that model reusable.
 
 ## Current scope
 
-RE35 0.2.3 includes the command, recipe, Results/recovery and presentation
+RE35 0.3.0 includes the command, recipe, Results/recovery and presentation
 workflows from 0.1.0, with remembered themes, list wrapping, inspectable
 errors, storage-state labels, first-use guidance, an Editor return destination
-and independent command/details panels.
+and independent command/details panels. It also separates editor handoff from
+session disposal, narrows execution checks to relevant changes, and uses one
+display model for existing window options and named presets. Theme appearance,
+preview controls and page navigation extend the existing selection workflow.
 
 The optional VS Code desktop host supports the documented document, profile,
 project, recipe, Results, recovery and appearance workflows. The optional C ABI

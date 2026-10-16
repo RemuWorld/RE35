@@ -231,22 +231,14 @@ H.ok(vim.wait(8000, function() return vim.fn.filereadable(folder .. '/guarded.st
 local registry_before = CE.registry()
 local profile_after = CE.profile()
 profile_after.ui.width = 53
-local notify, expected_notifications = vim.notify, {}
-vim.notify = function(message, ...)
-  if type(message) == 'string' and message:find('Settings changed during the recipe', 1, true) then
-    expected_notifications[#expected_notifications + 1] = message
-  else notify(message, ...) end
-end
 H.ok(CE.apply_profile(profile_after, 'replace'), 'actual profile Apply creates a new environment during the recipe')
 H.ok(CE.registry() ~= registry_before, 'Apply replaces the registry while retaining live operations')
-detail = running.finish('failed')
-vim.notify = notify
-H.eq(1, #expected_notifications, 'retired UI reports the guarded recipe stop once')
-H.eq(1, #detail.steps, 'old recipe finishes its owned child but never dispatches into the new environment')
+detail = running.finish('succeeded')
+H.eq(2, #detail.steps, 'unchanged execution declarations continue through the newly active environment')
 H.eq('succeeded', detail.steps[1].status)
-H.ok(detail.message:find('Settings changed', 1, true), 'stopped recipe explains the environment change')
-H.eq(1, #detail.child_ids)
-no_later_step()
+H.eq('succeeded', detail.steps[2].status)
+H.eq(2, #detail.child_ids)
+H.eq(1, vim.fn.filereadable(folder .. '/never.started'), 'unrelated appearance Apply permits the reviewed next process')
 
 CE.close(); CE.disable()
 vim.api.nvim_set_current_buf(source_buf)

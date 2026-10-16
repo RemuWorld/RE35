@@ -56,7 +56,7 @@ end
 local forbidden = { bufnr = true, winid = true, jobid = true, process_id = true, buffer_id = true,
   window_id = true, pid = true, password = true, secret = true, token = true, access_token = true,
   api_key = true, private_key = true, authorization = true, credentials = true }
-local function serial(value, label, seen, depth, budget, annotation_scope)
+local function serial(value, label, seen, depth, budget, submitted)
   budget.count = budget.count + 1
   if budget.count > 20000 or depth > 24 then fail("Profile exceeds nesting/item limits") end
   local kind = type(value)
@@ -70,20 +70,15 @@ local function serial(value, label, seen, depth, budget, annotation_scope)
     for key, child in pairs(value) do
       if (not array and type(key) ~= "string") or (array and type(key) ~= "number") then fail(label .. " has mixed/non-JSON keys") end
       if type(key) == "string" then
-        -- Argument names are structural keys, not submitted values. The
-        -- command-links validator separately allows only prompt/description
-        -- text inside each annotation; presets and every other map retain
-        -- the runtime/sensitive-value checks.
-        if annotation_scope ~= 'arguments' and forbidden[key:lower()] then fail(label .. "." .. key .. " contains runtime or sensitive data") end
+        -- A declaration's IDs and labels are not submitted argument values.
+        -- Strict field validators below own those structural maps; only the
+        -- opaque preset.args payload needs this recursive privacy policy.
+        if submitted and forbidden[key:lower()] then fail(label .. "." .. key .. " contains runtime or sensitive data") end
         if (key == "path" or key == "cwd" or key == "file" or key:match("_path$")) and absolute(child) then
           fail(label .. "." .. key .. " must be relative; keep machine paths in local configuration")
         end
       end
-      local child_scope
-      if depth == 0 and key == 'command_links' then child_scope = 'links'
-      elseif annotation_scope == 'links' then child_scope = 'link'
-      elseif annotation_scope == 'link' and key == 'arguments' then child_scope = 'arguments' end
-      serial(child, label .. "." .. tostring(key), seen, depth + 1, budget, child_scope)
+      serial(child, label .. "." .. tostring(key), seen, depth + 1, budget, submitted)
     end
     seen[value] = nil
   elseif kind ~= "string" and kind ~= "boolean" then fail(label .. " is not JSON data (" .. kind .. ")") end
@@ -185,6 +180,7 @@ local function validate(data)
     local seen = {}
     for _, preset in ipairs(values) do
       fields(preset, "name args", "preset"); text(preset.name, "preset.name"); object(preset.args, "preset.args")
+      serial(preset.args, "presets." .. command .. "." .. preset.name .. ".args", {}, 0, { count = 0 }, true)
       if seen[preset.name] then fail("Duplicate preset: " .. preset.name) end
       seen[preset.name] = true
     end

@@ -43,6 +43,36 @@ check(J.encode(prepared.presets['project.build'][1].args) == '{}', 'Empty preset
 check(prepared.presentation.presets.focused.extends == false, 'Standalone appearance declarations remain portable')
 prepared.projects.source.targets[1] = 'changed'
 check(declaration.projects.source.targets[1] == 'ce_cpp', 'Validated results are detached')
+-- Identifier maps are declarations, not a bag of submitted input values. A
+-- lexical token tool and a process-ID inspection command may use these words
+-- without importing any credential or live process handle.
+local identifier_profile = {
+  version = 1,
+  layout = { aliases = { token = 'inspect.lexeme', password = 'inspect.password_policy' },
+    word_paths = { pid = 'inspect.process' }, hidden = { credentials = false } },
+  workspaces = { overrides = { token = { name = 'Lexical tokens', keys = { pid = 'inspect.process' } } },
+    templates = { { id = 'password', name = 'Password policy', commands = { 'inspect.password_policy' } } } },
+  adapters = { token = 'parser.lexical' },
+  tools = { password = { command = 'policy-check' } },
+  projects = { pid = { targets = { 'token' } } },
+  recipes = { token = { project = 'pid', steps = { { id = 'password', tool = 'password' } } } },
+  presets = { pid = { { name = 'token', args = { choice = { name = 'lexical', value = 'token' } } } } },
+  command_links = { pid = { arguments = { password = { prompt = 'Policy name' } } } },
+  presentation = { version = 1, selected = 'token', presets = { token = { extends = 'full' } } },
+  requirements = { versions = { token = '1' } },
+}
+local identifiers = assert(P.validate(identifier_profile))
+check(identifiers.layout.aliases.token == 'inspect.lexeme' and identifiers.layout.aliases.password == 'inspect.password_policy',
+  'Alias names follow their identifier role rather than submitted-value privacy rules')
+check(identifiers.workspaces.overrides.token.keys.pid == 'inspect.process'
+  and identifiers.workspaces.templates[1].id == 'password', 'Workspace identifiers and native key names retain their declared role')
+check(identifiers.tools.password.command == 'policy-check' and identifiers.recipes.token.steps[1].tool == 'password',
+  'Tool, project, recipe and step IDs can use ordinary domain terms')
+local identifier_roundtrip = assert(P.decode(J.encode(identifiers)))
+check(identifier_roundtrip.presets.pid[1].name == 'token' and identifier_roundtrip.presets.pid[1].args.choice.value == 'token'
+  and identifier_roundtrip.command_links.pid.arguments.password.prompt == 'Policy name',
+  'Identifier roles and harmless choice data survive a portable JSON round trip')
+check(J.encode(identifier_roundtrip) == J.encode(identifiers), 'Role-aware normalization remains idempotent')
 local function mutate(callback)
   local data = J.decode(before); callback(data); return data
 end
@@ -55,6 +85,22 @@ rejected(mutate(function(d) d.tools = false end), 'Tools cannot be false')
 rejected(mutate(function(d) d.tools = U.array() end), 'Object positions reject explicit empty arrays')
 rejected(mutate(function(d) d.favorites = U.object() end), 'List positions reject explicit empty objects')
 rejected(mutate(function(d) d.presets['project.build'][1].args.password = 'value' end), 'Sensitive submitted values refused')
+for _, key in ipairs({ 'token', 'PASSWORD', 'pid', 'winid', 'authorization', 'credentials', 'private_key' }) do
+  local data = { version = 1, presets = { token = { { name = 'pid',
+    args = { choice = { name = 'selected', value = { [key] = 'private-value' } } } } } } }
+  rejected(data, 'Nested submitted choice data retains privacy protection: ' .. key)
+end
+rejected({ version = 1, tools = { token = { command = 'lex', password = 'private-value' } } },
+  'Identifier role does not allow unknown fields inside a tool declaration')
+rejected({ version = 1, workspaces = { overrides = { pid = { token = 'private-value' } } } },
+  'Identifier role does not allow unknown workspace fields')
+rejected({ version = 1, token = 'private-value' }, 'Unknown root fields remain rejected even when they resemble identifiers')
+rejected({ version = 1, presets = { token = { { name = 'choice', args = { choice = { value = { file_path = 'C:/private/source.cpp' } } } } } } },
+  'Nested submitted paths remain machine independent')
+rejected({ version = 1, presets = { token = { { name = 'choice', args = { choice = { value = function() end } } } } } },
+  'Nested submitted choices cannot contain callbacks')
+rejected({ version = 1, command_links = { pid = { arguments = { token = { token = 'private-value' } } } } },
+  'Metadata argument names remain allowed while submitted annotation values remain forbidden')
 rejected(mutate(function(d) d.command_links['project.build'].arguments.password.value = 'value' end), 'Annotations do not carry values')
 rejected(mutate(function(d) d.ui = U.null end), 'Null declarations refused')
 rejected(mutate(function(d) d.layout = { aliases = { ['project.build'] = 'another.command' } } end), 'Stable command link cannot be redirected by alias')

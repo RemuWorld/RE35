@@ -1,6 +1,6 @@
 # Compatibility and limitations
 
-## RE35 0.2.3
+## RE35 0.3.0
 
 The primary Neovim host requires **Neovim 0.11 or newer** on Windows or Linux.
 It uses Lua source directly and does not require another plugin, a compiler or

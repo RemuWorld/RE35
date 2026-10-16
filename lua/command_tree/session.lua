@@ -10,6 +10,8 @@ local Guide = require('command_tree.session.key_guide')
 local Dispatch = require('command_tree.session.dispatch')
 local Lists = require('command_tree.list_navigation')
 local Feedback = require('command_tree.session.feedback')
+local Driver = require('command_tree.session.input_driver')
+local Lifetime = require('command_tree.session.lifecycle')
 local snapshot, restore = Navigation.snapshot, Navigation.restore
 local capture_settings_navigation, validate_settings_navigation = Navigation.capture_settings, Navigation.validate_settings
 local field_value = Input.value
@@ -23,6 +25,7 @@ function M.consume_submission(command, ctx, args, operation)
   local scope = execution and execution.submission
   if not scope or execution.consumed or execution.context ~= ctx or execution.args ~= args
     or execution.operation ~= operation or scope.owner.active ~= scope.state
+    or not scope.attachment or scope.state.input_attachment ~= scope.attachment or scope.attachment.detached
     or scope.state.input ~= scope.input or scope.input.command ~= command
     or scope.owner.registry:get(command.id) ~= command then return false end
   execution.consumed = true
@@ -34,6 +37,22 @@ local function text_key(key, raw)
   if key == "<lt>" then return "<" end
   if key and not key:match("^<.*>$") then return raw or key end
 end
+local function result_identities_equal(left, right, words)
+  if not left or #left ~= #right then return false end
+  for index, item in ipairs(left) do
+    local other = right[index]
+    if item.id ~= other.id or words and item.word_path ~= other.word_path then return false end
+  end
+  return true
+end
+local function page_selection(state, index, count, direction)
+  -- The renderer owns row capacity. A short final page must not shrink the
+  -- distance of the following PageUp; visible bounds are an older-host fallback.
+  local view = state.view or {}
+  local size = view.page_size or view.visible_first and view.visible_last and (view.visible_last - view.visible_first + 1) or 1
+  size = math.max(1, math.floor(size))
+  return math.max(1, math.min(count, (index or 1) + direction * size))
+end
 -- A captured live form can supply an invocation boundary, never public args.
 local function execution_scope(self, submission, command)
   if not submission or submission.owner ~= self or submission.input.command ~= command then return nil end
@@ -41,6 +60,7 @@ local function execution_scope(self, submission, command)
     local previous = active_execution
     -- Activate only after Executor admission. Validation hooks carry no Apply.
     local matches = executed_command == command and self.active == submission.state
+      and submission.attachment and submission.state.input_attachment == submission.attachment and not submission.attachment.detached
       and submission.state.input == submission.input
       and vim.deep_equal(executed_ctx, submission.context) and vim.deep_equal(executed_args, submission.args)
     active_execution = matches and { submission = submission, context = executed_ctx,
@@ -79,35 +99,6 @@ function M.new(services)
     return true
   end
 
-  function self:close()
-    local state = self.active
-    if not state then return end
-    if state.input and not state.input.callback and state.input.command.id then
-      local input, field = state.input, state.input.command.arguments[state.input.index]
-      local form_visible = state.mode == 'input' or state.mode == 'feedback' and state.frames[#state.frames] and state.frames[#state.frames].mode == 'input'
-      if field and form_visible and not field.secret then
-        input.drafts[field.name] = input.choices and field_value(input) or input.text
-      end
-      if not input.succeeded then self.drafts:save(input.command, input, input.context or state.ctx) end
-    end
-    self:clear_preview()
-    self.active = nil
-    state.running = false
-    if state.paste_handler and vim.paste == state.paste_handler then vim.paste = state.original_paste end
-    if state.input and state.input.callback then
-      local callback = state.input.callback
-      state.input.callback = nil
-      pcall(callback, nil)
-    end
-    if state.input and state.input.done then
-      local done = state.input.done
-      state.input.done = nil
-      pcall(done, false, "Cancelled")
-    end
-    self.workspaces:clear(state)
-    V.close(state.view)
-  end
-
   function self:results()
     local state = self.active
     local ids = state.filter == "recent" and self.usage:recent() or state.filter == "favorites" and self.usage:favorites() or nil
@@ -118,12 +109,19 @@ function M.new(services)
     else
       results = state.mode == "words" and self.registry:words(state.query or "", state.ctx)
         or self.registry:search(state.query or "", state.ctx, { ids = ids })
+      -- Cursor-only edits reuse the cache. A different query may still produce
+      -- the same ordered semantic results, which keeps the user's selection.
+      if state.search_cache and not result_identities_equal(state.search_cache.results, results, state.mode == 'words') then
+        state.selected, state.selected_id, state.selected_word = 1, nil, nil
+      end
       state.search_cache = { key = cache_key, results = results }
     end
     if state.selected_id then
+      local retained = false
       for index, result in ipairs(results) do
-        if result.id == state.selected_id and (state.mode ~= "words" or not state.selected_word or result.word_path == state.selected_word) then state.selected = index; break end
+        if result.id == state.selected_id and (state.mode ~= "words" or not state.selected_word or result.word_path == state.selected_word) then state.selected, retained = index, true; break end
       end
+      if not retained then state.selected, state.selected_id, state.selected_word = 1, nil, nil end
     end
     state.selected = math.max(1, math.min(state.selected or 1, #results))
     state.selected_id = results[state.selected] and results[state.selected].id
@@ -233,11 +231,16 @@ function M.new(services)
   end
 
   function self:run(id, args, route, done, prepared, context, process_target)
+    if self.transitioning or not self.active then
+      local why = self.transitioning and 'Session lifecycle is already changing: ' .. self.transitioning or 'Command session is not attached'
+      if done then pcall(done, false, why) end
+      return false, why
+    end
     return run_scoped(nil, id, args, route, done, prepared, context, process_target)
   end
 
   local function dispatch_submission(input, done)
-    local submission = { owner = self, state = self.active, input = input,
+    local submission = { owner = self, state = self.active, input = input, attachment = self.active.input_attachment,
       context = vim.deepcopy(input.context), args = vim.deepcopy(input.args) }
     return run_scoped(submission, input.command.id, input.args, nil, done, true, input.context)
   end
@@ -296,6 +299,8 @@ function M.new(services)
     if not state then return end
     local workspace_input = state.mode == "workspace" and self.workspaces.input_active and self.workspaces:input_active(state)
     local shortcut_input = workspace_input or state.mode == "selector" and state.selector_filtering
+    local page_direction = key == (self.options.keys.page_down or '<PageDown>') and 1
+      or key == (self.options.keys.page_up or '<PageUp>') and -1 or nil
     raw = raw or (key:match("^<.*>$") and K.raw(key) or key)
     local editing = workspace_input or state.mode == "search" or state.mode == "words"
       or state.mode == "selector" and state.selector_filtering
@@ -348,7 +353,7 @@ function M.new(services)
           local input = state.input
           if input.choices and input.filtering then input.filter, input.filter_cursor = Text.edit(input.filter, input.filter_cursor, key, raw); self:filter_choices()
           elseif not input.choices then input.text, input.cursor = Text.edit(input.text, input.cursor, key, raw); input.completion = nil; self:preview_input() end
-        else state.query, state.query_cursor = Text.edit(state.query, state.query_cursor, key, raw); state.selected_id = nil end
+        else state.query, state.query_cursor = Text.edit(state.query, state.query_cursor, key, raw) end
       end
     elseif key == "<C-c>" or key == self.options.keys.close then
       local ctx = state.ctx
@@ -385,8 +390,8 @@ function M.new(services)
       local ok, why = self:configure_backend()
       if not ok then state.message = why end
     elseif state.mode == "inspect" and key == "<CR>" then
-      if state.recovered_query_command and state.recovered_query_id == state.inspected_id then
-        if self.registry:get(state.inspected_id) ~= state.recovered_query_command then
+      if state.recovered_query_id and state.recovered_query_id == state.inspected_id then
+        if not state.recovered_query_command or self.registry:get(state.inspected_id) ~= state.recovered_query_command then
           state.message = "The command changed after recovery; reopen it before running"
         else
           local valid,why=require('command_tree.backend_editor').validate_recovery(state.recovered_query_receipt,state.ctx)
@@ -401,6 +406,7 @@ function M.new(services)
       local input, count = state.input, #state.input.command.arguments
       if key == "<Down>" or key == "<C-n>" or key == "j" then input.review_selected = Lists.move(input.review_selected or count + 1, count + 1, 1, self.options.navigation)
       elseif key == "<Up>" or key == "<C-p>" or key == "k" then input.review_selected = Lists.move(input.review_selected or count + 1, count + 1, -1, self.options.navigation)
+      elseif page_direction then input.review_selected = page_selection(state, input.review_selected or count + 1, count + 1, page_direction)
       elseif key == "<CR>" then
         if input.review_selected == count + 1 then self:execute_review()
         else state.mode, input.index, input.editing_review = "input", input.review_selected, true; self:input_field() end
@@ -409,12 +415,15 @@ function M.new(services)
       end
     elseif state.mode == "input" then
       local input, field = state.input, state.input.command.arguments[state.input.index]
-      if key == "<CR>" then
+      if self:input_control(key) then
+        -- Native input controls update a detached draft; acceptance stays Enter.
+      elseif key == "<CR>" then
         self:accept_input(false)
       elseif key == "<C-s>" and not input.callback then self:accept_input(true)
       elseif input.choices then
         if key == "<Down>" or key == "<C-n>" or (not input.filtering and key == "j") then input.selected = Lists.move(input.selected, #input.choices, 1, self.options.navigation)
         elseif key == "<Up>" or key == "<C-p>" or (not input.filtering and key == "k") then input.selected = Lists.move(input.selected, #input.choices, -1, self.options.navigation)
+        elseif page_direction then input.selected = page_selection(state, input.selected, #input.choices, page_direction)
         elseif not input.filtering and key == "/" then input.filtering = true
         elseif not input.filtering and key == "<Space>" and field.kind == "multiselect" then
           local item = input.choices[input.selected]
@@ -441,6 +450,7 @@ function M.new(services)
       local results = state.mode ~= "selector" and self:results() or self:workspace_choices()
       if key == "<Down>" or key == "<C-n>" or (state.mode == "selector" and not state.selector_filtering and key == "j") then state.selected = Lists.move(state.selected, #results, 1, self.options.navigation)
       elseif key == "<Up>" or key == "<C-p>" or (state.mode == "selector" and not state.selector_filtering and key == "k") then state.selected = Lists.move(state.selected, #results, -1, self.options.navigation)
+      elseif page_direction then state.selected = page_selection(state, state.selected, #results, page_direction)
       elseif key == "<Tab>" and state.mode == "words" and results[state.selected] then
         state.query = results[state.selected].word_path or state.query
         state.query_cursor, state.selected_id = vim.fn.strchars(state.query), nil
@@ -458,8 +468,9 @@ function M.new(services)
           state.selector_filtering = true
           state.query_cursor = vim.fn.strchars(state.query or "")
         elseif state.selector_filtering then
+          local previous = state.query
           state.query, state.query_cursor = Text.edit(state.query or "", state.query_cursor, key, raw)
-          state.selected = 1
+          if previous ~= state.query then state.selected = 1 end
         end
       elseif state.mode == "search" or state.mode == "words" then
         if key == self.options.keys.favorite and results[state.selected] then
@@ -470,9 +481,9 @@ function M.new(services)
             or enabled and (persistent and "Added to favorites" or "Favorited for this Neovim session") or "Removed from favorites"
           if not err then self:set_notice(state.message, enabled and 'Favorite added' or 'Favorite removed') end
         elseif key == "<C-v>" then state.literal = true
-        else state.query, state.query_cursor = Text.edit(state.query or "", state.query_cursor, key, raw); state.selected, state.selected_id = 1, nil end
+        else state.query, state.query_cursor = Text.edit(state.query or "", state.query_cursor, key, raw) end
       end
-      if (state.mode == "search" or state.mode == "words") and (key == "<Down>" or key == "<Up>" or key == "<C-n>" or key == "<C-p>") then
+      if (state.mode == "search" or state.mode == "words") and (page_direction or key == "<Down>" or key == "<Up>" or key == "<C-n>" or key == "<C-p>") then
         state.selected_id = results[state.selected] and results[state.selected].id
         state.selected_word = state.mode == "words" and results[state.selected] and results[state.selected].word_path or nil
       end
@@ -482,6 +493,11 @@ function M.new(services)
     elseif state.mode ~= "keymaps" and key == self.options.keys.favorites then self:push_mode("search", { query = "", filter = "favorites" })
     elseif state.mode ~= "keymaps" and key == self.options.keys.detail then self:cycle_density()
     elseif key == "<BS>" then self:back()
+    elseif page_direction then
+      if state.mode == 'tree' then
+        state.tree_selected_entry = nil
+        state.tree_selection = page_selection(state, state.tree_selection or state.view.visible_first, #(state.tree_items or {}), page_direction)
+      else state.page = math.max(1, math.min(state.pages or 1, state.page + page_direction)) end
     elseif key == "<C-d>" or key == "<C-u>" then state.page = math.max(1, math.min(state.pages or 1, state.page + (key == "<C-d>" and 1 or -1)))
     elseif state.mode == "tree" then
       if key == "<Down>" or key == "<Up>" then
@@ -544,39 +560,30 @@ function M.new(services)
     self:draw()
   end
 
-  function self:open(opts)
-    opts = opts or {}
-    if self.active then self:close(); return end
-    local ctx = opts.context or K.context(opts.mode)
-    local settings_return, settings_return_error
-    if opts.settings_navigation then
-      settings_return, settings_return_error = validate_settings_navigation(opts.settings_navigation, ctx)
-      if not settings_return then ctx = K.context() end
-    end
-    if not K.valid(ctx) then return end
-    local state = { ctx = ctx, mode = opts.kind or "tree", path = K.tokens(opts.keys or ""), view = {},
-      frames = {}, stack = {}, workspace_returns = {}, running = true, selected = 1, page = 1, navigation = 0,
-      visible = not opts.automatic, automatic = opts.automatic, opened = vim.uv.hrtime(),
-      density = self.preferences and self.preferences:get("density", self.options.window.density) or self.options.window.density, delay = opts.automatic and self.options.delay or 0,
-      hud_visible = self.options.history.visible }
-    self.active = state
-    if self.options.presentation then
-      local Core, Data = require('command_environment.core.presentation'), require('command_tree.presentation_data')
-      local config = Data.core(self.options.presentation)
-      state.presentation_id = config.selected or state.density
-      local model = assert(Core.resolve(config, state.presentation_id, 'tree', { density = state.density }))
-      state.density = model.layout.density
-    end
+  function self:bind_workspace(state)
+    local attachment = state.input_attachment
+    local function owns() return self:is_attached(state, attachment) end
     state.workspace_registry = self.registry
-    state.workspace_execute = function(id, args, context) return self:run(id, args, nil, nil, false, context) end
-    state.workspace_input = function(options, callback, context) return self:request_input(options, callback, context or state.ctx) end
-    state.workspace_select = function(items, options, callback, context) return self:request(items, options, callback, context or state.ctx) end
+    state.workspace_execute = function(id, args, context)
+      if not owns() then return false, 'Workspace surface is no longer attached' end
+      return self:run(id, args, nil, nil, false, context)
+    end
+    state.workspace_input = function(options, callback, context)
+      if not owns() then callback(nil); return end
+      return self:request_input(options, callback, context or state.ctx)
+    end
+    state.workspace_select = function(items, options, callback, context)
+      if not owns() then callback(nil); return end
+      return self:request(items, options, callback, context or state.ctx)
+    end
     state.workspace_open = function(id, options)
+      if not owns() then return false, 'Workspace surface is no longer attached' end
       local ok, err = self:enter_workspace(id, options)
       if ok then self:draw() end
       return ok, err
     end
     state.workspace_back = function(frame)
+      if not owns() then return false, 'Workspace surface is no longer attached' end
       if self.active~=state or state.mode~='workspace' or state.stack[#state.stack]~=frame then
         return false,'Workspace navigation changed; reopen the owning task'
       end
@@ -586,16 +593,15 @@ function M.new(services)
       self:draw();return true
     end
     state.workspace_recover = function(receipt)
+      if not owns() then return false, 'Command navigation changed; reopen the command instead of restoring this recovery' end
       local frame = state.stack[#state.stack]
       if self.active ~= state or state.mode ~= "workspace" or not frame or frame.id ~= "settings"
         or frame._backend_recovery_owner ~= state or frame._backend_recovery_navigation ~= state.navigation
         or not vim.deep_equal(frame.data.backend_recovery, receipt) then
         return false, "Command navigation changed; reopen the command instead of restoring this recovery"
       end
-      if self.registry:get(receipt.command_id) ~= frame._backend_recovery_command then
-        return false, "The original command changed; reopen its details before returning"
-      end
-      local valid, why = require("command_tree.backend_editor").validate_recovery(receipt, state.ctx)
+      local command, editor = frame._backend_recovery_command, require('command_tree.backend_editor')
+      local valid, why, fresh = editor.validate_navigation(receipt, state.ctx)
       if not valid then return false, why end
       -- This is a navigation return. Opening Inspect never invokes its command.
       -- Keep the same input loop and source context while releasing all Settings resources.
@@ -604,11 +610,19 @@ function M.new(services)
         state.mode, state.frames, state.workspace_returns = "tree", {}, {}
         return false, "Settings cleanup failed; reopen the original command"
       end
+      if not owns() then return false, 'Command navigation changed during Settings cleanup' end
+      valid, why, fresh = editor.validate_navigation(receipt, state.ctx)
+      if not valid then
+        state.mode, state.frames, state.workspace_returns = 'tree', {}, {}
+        state.path, state.ctx = {}, K.context()
+        return false, why
+      end
       state.workspace_returns, state.frames = {}, {}
+      state.ctx = fresh
       restore(state, vim.deepcopy(receipt.origin))
       if state.mode ~= "tree" then state.frames[1] = { mode = "tree", path = {}, page = 1, selected = 1 } end
       self:push_mode("inspect", { inspected_id = receipt.command_id })
-      state.recovered_query, state.recovered_query_command = receipt.query, receipt.query and self.registry:get(receipt.command_id) or nil
+      state.recovered_query, state.recovered_query_command = receipt.query, receipt.query and command or nil
       state.recovered_query_id = receipt.query and receipt.command_id or nil
       state.recovered_query_receipt = receipt.query and vim.deepcopy(receipt) or nil
       state.message = "Returned to the original command; press Enter to run explicitly"
@@ -616,33 +630,39 @@ function M.new(services)
       return true
     end
     state.workspace_navigate = function(item, context)
+      if not owns() then return false, 'Workspace surface is no longer attached' end
       local origin = context or state.ctx
       self:close()
       return require("command_tree.results").jump(item, origin)
     end
-    state.original_paste = vim.paste
-    state.paste_handler = function(lines, phase)
-      if self.active ~= state then return state.original_paste(lines, phase) end
-      if state.mode == "keymaps" then
-        self:close()
-        return state.original_paste(lines, phase)
-      end
-      if phase == -1 or phase == 1 then state.paste_text = "" end
-      state.paste_text = (state.paste_text or "") .. table.concat(lines, "\n")
-      if #state.paste_text > 1048576 then
-        state.paste_text, state.message = nil, "Paste exceeds the 1 MiB input limit"
-        self:draw()
-        return false
-      end
-      if phase == -1 or phase == 3 then
-        local value = state.paste_text
-        state.paste_text = nil
-        local ok, err = pcall(self.paste, self, { value })
-        if not ok then state.message = "Paste: " .. tostring(err); self:draw(); return false end
-      end
-      return true
+  end
+
+  function self:prepare(opts)
+    opts = opts or {}
+    if self.active or self.suspended or self.cleanup_pending then return nil, 'Close the existing logical session before preparing another' end
+    local ctx = opts.context or K.context(opts.mode)
+    local settings_return, settings_return_error
+    if opts.settings_navigation then
+      settings_return, settings_return_error = validate_settings_navigation(opts.settings_navigation, ctx)
+      ctx = settings_return and settings_return.context or K.context()
     end
-    vim.paste = state.paste_handler
+    if not K.valid(ctx) then return nil, 'Command source is no longer available' end
+    local state = { ctx = ctx, mode = opts.kind or "tree", path = K.tokens(opts.keys or ""), view = {},
+      frames = {}, stack = {}, workspace_returns = {}, running = true, selected = 1, page = 1, navigation = 0,
+      visible = not opts.automatic, automatic = opts.automatic, opened = vim.uv.hrtime(),
+      density = self.preferences and self.preferences:get("density", self.options.window.density) or self.options.window.density, delay = opts.automatic and self.options.delay or 0,
+      hud_visible = self.options.history.visible }
+    self:identify(state)
+    self.active = state
+    if self.options.presentation then
+      local Core, Data = require('command_environment.core.presentation'), require('command_tree.presentation_data')
+      local config = Data.core(self.options.presentation)
+      state.presentation_id = config.selected or state.density
+      local model = assert(Core.resolve(config, state.presentation_id, 'tree', { density = state.density }))
+      state.density = model.layout.density
+    end
+    Driver.attach(self, state)
+    self:bind_workspace(state)
     local prepared, failure = xpcall(function()
       if state.mode == "keymaps" then state.keymap_root = Maps.collect(ctx, self.options) end
       if state.mode == "search" or state.mode == "words" or state.mode == "selector" then
@@ -675,40 +695,57 @@ function M.new(services)
       self:draw()
     end, debug.traceback)
     if not prepared then state.message = tostring(failure); self:draw() end
-    if opts.interactive == false or not self.active then return state end
-    local ok, err = xpcall(function()
-      while self.active == state and state.running do
-        if not K.valid(ctx) or vim.api.nvim_get_current_win() ~= ctx.win then break end
-        local started = vim.uv.hrtime()
-        local node = state.mode == "keymaps" and Maps.node(state.keymap_root, state.path)
-        local timeout = state.automatic and node and node.native and has_children(node) and vim.o.timeout and vim.o.timeoutlen
-        while self.active == state do
-          local raw = vim.fn.getcharstr(0)
-          if raw ~= "" then self:handle(K.tokens(raw, true)[1], raw); break end
-          if not state.visible and (vim.uv.hrtime() - state.opened) / 1e6 >= state.delay then state.visible = true; self:draw() end
-          if timeout and (vim.uv.hrtime() - started) / 1e6 >= timeout then self:handle("timeout"); break end
-          if not K.valid(ctx) or vim.api.nvim_get_current_win() ~= ctx.win then self:close(); break end
-          vim.wait(10, function() return self.active ~= state end, 10)
-        end
-      end
-    end, debug.traceback)
-    if self.active == state then self:close() end
-    if not ok and not tostring(err):match("[Ii]nterrupt") then vim.notify(err, vim.log.levels.ERROR, { title = "Command Environment" }) end
+    return state
+  end
+
+  function self:open(opts)
+    opts = opts or {}
+    if self.transitioning then return nil, 'Session lifecycle is already changing: ' .. self.transitioning end
+    if self.cleanup_pending then
+      local cleaned, why = self:close()
+      if not cleaned then return nil, 'Previous surface cleanup is incomplete: ' .. tostring(why) end
+    end
+    if self.active then
+      local closed, why = self:close()
+      if not closed then return nil, why end
+      return
+    end
+    local explicit = false
+    for _, key in ipairs({ 'kind', 'search', 'keys', 'workspace', 'history', 'command', 'settings_navigation' }) do
+      if opts[key] ~= nil then explicit = true; break end
+    end
+    if self.suspended and (not vim.api.nvim_buf_is_valid(self.suspended.ctx.buf)
+      or not vim.api.nvim_win_is_valid(self.suspended.ctx.win)) then
+      local closed, why = self:close()
+      if not closed then return nil, why end
+    end
+    if self.suspended and not explicit and not opts.automatic then return self:resume(opts) end
+    if self.suspended then
+      local closed, why = self:close()
+      if not closed then return nil, why end
+    end
+    local state, why = self:prepare(opts)
+    if not state then return nil, why end
+    if state and opts.interactive ~= false and self.active == state then Driver.drive(self, state) end
     return state
   end
 
   function self:state()
-    local state = self.active
-    if not state then return { active = false } end
+    if self.cleanup_pending then return { active = false, suspended = false, surface_attached = false,
+      cleanup_pending = true, cleanup_error = self.cleanup_pending.cleanup_error } end
+    local state = self.active or self.suspended
+    if not state then return { active = false, suspended = false, surface_attached = false } end
+    if self.suspended == state then return { active = false, suspended = true, surface_attached = false, session_id = state.session_id } end
     local workspaces = {}
     for _, frame in ipairs(state.stack) do workspaces[#workspaces + 1] = frame.id end
-    return { active = true, kind = state.mode, context = vim.deepcopy(state.ctx), path = copy_path(state.path),
+    return { active = true, suspended = false, surface_attached = true, session_id = state.session_id, kind = state.mode, context = vim.deepcopy(state.ctx), path = copy_path(state.path),
       visible = state.visible, density = state.density, presentation_id = state.presentation_id, query = state.query, selected = state.selected,
       page = state.page, message = state.message, busy = state.busy, workspaces = workspaces, window = state.view.win, buffer = state.view.buf,
       details_window = state.view.details and state.view.details.win,
       panels = state.view.panel_report and vim.deepcopy(state.view.panel_report) or nil }
   end
 
+  Lifetime.attach(self)
   Navigation.attach(self)
   Feedback.attach(self)
   Input.attach(self, dispatch_submission)

@@ -1,5 +1,13 @@
 -- Declarative tools use argv, never a shell command assembled from filenames.
 local M = {}
+-- Only host registration grants the saved-input policy. A field supplied by
+-- an imported profile or an arbitrary custom command cannot grant it.
+local execution_scopes = setmetatable({}, { __mode = 'k' })
+function M.bind_execution_scope(command, resolver)
+  assert(type(command) == 'table' and type(resolver) == 'function', 'Invalid project execution scope')
+  execution_scopes[command] = resolver
+end
+function M.execution_scope(command) return execution_scopes[command] end
 local markers = { ".git", "compile_commands.json", "CMakeLists.txt", "package.json", "Cargo.toml", "pyproject.toml" }
 M.markers = vim.deepcopy(markers)
 local function source(ctx) return ctx.file ~= nil and ctx.file or vim.api.nvim_buf_get_name(ctx.buf) end
@@ -65,6 +73,13 @@ function M.cwd(tool, ctx)
   else error("Tool working directory must be a local path or a base/path declaration", 0) end
   return vim.fs.normalize(vim.fn.fnamemodify(cwd, ":p")), root
 end
+function M.tool_revision(tool, process_helper)
+  local cwd = type(tool.cwd) == 'table' and { tool.cwd.base, tool.cwd.path } or tool.cwd or false
+  -- These are the facts consumed by target resolution, parsing and process
+  -- ownership. Labels and unrelated integration metadata do not affect a run.
+  return vim.fn.sha256(vim.json.encode({ tool.command, tool.args or {}, cwd, tool.errorformat or false,
+    tool.timeout_ms or false, tool.cancel_grace_ms or 2000, process_helper or false }))
+end
 function M.register(registry, tools, local_overrides, process_helper)
   local Process = require("command_tree.host.process")
   Process.validate(process_helper)
@@ -82,14 +97,20 @@ function M.register(registry, tools, local_overrides, process_helper)
       assert(value == nil or type(value) == "number" and value >= 1 and value <= 2147483647 and value % 1 == 0,
         "Tool " .. field .. " must be a positive millisecond integer")
     end
-    local cwd_spec = type(tool.cwd) == "table" and { tool.cwd.base, tool.cwd.path } or tool.cwd or false
-    -- Ordered scalar data makes the signature stable regardless of JSON object
-    -- key order. Labels and unrelated local integration metadata do not count.
-    local process_revision = vim.fn.sha256(vim.json.encode({ tool.command, tool.args or {}, cwd_spec, tool.errorformat or false,
-      tool.timeout_ms or false, tool.cancel_grace_ms or 2000, process_helper or false }))
+    local process_revision = M.tool_revision(tool, process_helper)
+    local function profile_revision(profile)
+      local declared = profile.tools and profile.tools[name]
+      -- Local profile.data defaults may be absent from the saved profile. An
+      -- absent declaration is a comparable disk baseline, not a parse failure.
+      if not declared then return false end
+      local effective = vim.tbl_deep_extend('force', vim.deepcopy(declared), local_overrides[name] or {})
+      if (local_overrides[name] or {}).args then effective.args = vim.deepcopy(local_overrides[name].args) end
+      return M.tool_revision(effective, process_helper)
+    end
     registry:register({ id = "tool." .. name, name = declaration.description or name, provider = "project", type = "action", async = true,
       description = "Project tool: " .. declaration.command, backend = "process",
       process_revision = process_revision,
+      process_profile_revision = profile_revision,
       process_cwd = function(ctx) return M.cwd(tool, ctx) end,
       process_resolve_target = function(ctx) return M.target(tool, ctx) end,
       process_validate_target = function(target) return M.validate_target(tool, target) end,
@@ -99,6 +120,9 @@ function M.register(registry, tools, local_overrides, process_helper)
         local target = invocation.process_target or M.target(tool, ctx)
         return Process.run(tool, name, process_helper, target, done, invocation)
       end })
+    -- Recipe registration also accepts a register-only adapter; it binds its
+    -- final child descriptor after adding the parent ownership checks.
+    if type(registry.get) == 'function' then M.bind_execution_scope(registry:get('tool.' .. name), profile_revision) end
   end
 end
 return M

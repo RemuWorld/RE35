@@ -162,15 +162,44 @@ function Manager:inherit_state(previous,old_workspaces,new_workspaces)
     if accepted[item.record.win]==nil then self.selections[item.record.win]=item.value end
   end
 end
-function Manager:tool(step)
-  local declared=self.env.profile.tools[step.tool]
+local function effective_tool(profile,options,step)
+  local declared=profile.tools[step.tool]
   check(declared,'Tool declaration is missing: '..step.tool)
-  local override=(self.env.options.tool_overrides or {})[step.tool] or {}
+  local override=(options.tool_overrides or {})[step.tool] or {}
   local tool=vim.tbl_deep_extend('force',copy(declared),copy(override))
   if override.args then tool.args=copy(override.args)end
   if step.args then tool.args=copy(step.args)end
   if step.cwd then tool.cwd=copy(step.cwd)end
   return tool
+end
+function Manager:tool(step)return effective_tool(self.env.profile,self.env.options,step)end
+
+-- A launch depends on this recipe's declarations and effective tools, not the
+-- profile's appearance, aliases, or tools which no step references. Storage
+-- transactions still compare the whole profile before committing a draft.
+function M.profile_revision(profile,options,id)
+  local ok,value=pcall(function()
+    check(type(profile)=='table' and type(profile.tools)=='table','Recipe profile must contain tools')
+    options=options or {}
+    check(profile.recipes==nil or type(profile.recipes)=='table','Recipe declarations must be an object')
+    local declaration=(profile.recipes or {})[id]
+    if declaration==nil then return false end
+    check(type(declaration)=='table' and type(declaration.project)=='string','Recipe project must be declared')
+    check(profile.projects==nil or type(profile.projects)=='table','Project declarations must be an object')
+    local declared_project=(profile.projects or {})[declaration.project]
+    local projects,recipes=M.validate(declared_project and {[declaration.project]=declared_project} or {},{[id]=declaration})
+    check(projects,recipes)
+    local recipe=recipes[id]
+    check(recipe,'Recipe declaration is missing: '..tostring(id))
+    local tools={}
+    for index,step in ipairs(recipe.steps)do
+      tools[index]=profile.tools[step.tool] and Project.tool_revision(effective_tool(profile,options,step),options.process_helper) or false
+    end
+    return vim.fn.sha256(stable({recipe,projects[recipe.project] or false,
+      (options.project_overrides or {})[recipe.project] or {},tools,options.process_helper or false}))
+  end)
+  if not ok then return nil,tostring(value)end
+  return value
 end
 local function step_target(tool,plan)
   local bases={project=plan.root,config=vim.fn.stdpath('config'),home=vim.uv.os_homedir()}
@@ -261,8 +290,9 @@ function M.new(env)
     if override.root~=nil then text(override.root,'Local project root')end
   end
   for id,recipe in pairs(recipes)do
-    self.revisions[id]=vim.fn.sha256(stable({recipe,projects[recipe.project] or false,self.overrides[recipe.project] or {},env.profile.tools,
-      env.options.tool_overrides or {},env.options.process_helper or false}))
+    local revision,why=M.profile_revision(env.profile,env.options,id)
+    check(revision,why)
+    self.revisions[id]=revision
   end
   return self
 end

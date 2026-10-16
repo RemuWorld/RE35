@@ -181,7 +181,7 @@ function M.applied_recovery(receipt, applied_profile)
   result.backend = selected(applied_profile, result.capability)
   return result
 end
-function M.validate_recovery(receipt, ctx)
+local function validate_recovery(receipt, ctx, inspection)
   local safe = pcall(receipt_data, receipt)
   if not safe then return false, 'The command recovery data is invalid; reopen the command' end
   if type(receipt) ~= 'table' or receipt.version ~= 1 or not capability(receipt.command_id)
@@ -194,15 +194,17 @@ function M.validate_recovery(receipt, ctx)
     or not K.valid(ctx) or ctx.buf ~= original.buf or ctx.win ~= original.win then
     return false, 'The original command context changed; reopen the command'
   end
-  local unchanged, why = K.unchanged(original)
-  if not unchanged then return false, why end
   if vim.api.nvim_buf_get_name(original.buf) ~= receipt.filename then return false, 'The source filename changed; reopen the command' end
-  if canonical(require('command_tree.project').root(original)) ~= receipt.root then return false, 'Project root changed; reopen the command' end
-  if fingerprint(CE().profile()) ~= receipt.profile or fingerprint(CE().runtime_bindings()) ~= receipt.runtime then
-    return false, 'Settings or command paths changed since this recovery; reopen the command'
+  if not inspection then
+    local unchanged, why = K.unchanged(original)
+    if not unchanged then return false, why end
+    if canonical(require('command_tree.project').root(original)) ~= receipt.root then return false, 'Project root changed; reopen the command' end
+    if fingerprint(CE().profile()) ~= receipt.profile or fingerprint(CE().runtime_bindings()) ~= receipt.runtime then
+      return false, 'Settings or command paths changed since this recovery; reopen the command'
+    end
+    local command = CE().registry():get(receipt.command_id)
+    if not command or command.backend ~= receipt.backend then return false, 'The original command backend changed; reopen the command' end
   end
-  local command = CE().registry():get(receipt.command_id)
-  if not command or command.backend ~= receipt.backend then return false, 'The original command backend changed; reopen the command' end
   if receipt.origin.mode ~= 'tree' and receipt.origin.mode ~= 'search' and receipt.origin.mode ~= 'words' then
     return false, 'The original navigation is unavailable; reopen the command'
   end
@@ -214,12 +216,19 @@ function M.validate_recovery(receipt, ctx)
     return false, 'The original command navigation is invalid; reopen the command'
   end
   for _, key in ipairs(receipt.origin.path) do if type(key) ~= 'string' then return false, 'The original command path is invalid; reopen the command' end end
+  if inspection then
+    local ok, fresh = pcall(K.call, ctx, K.context)
+    if not ok or not K.valid(fresh) then return false, 'The original command context changed; reopen the command' end
+    return true, nil, fresh
+  end
   return true
 end
+function M.validate_recovery(receipt, ctx) return validate_recovery(receipt, ctx, false) end
+function M.validate_navigation(receipt, ctx) return validate_recovery(receipt, ctx, true) end
 function M.prepare_apply_return(frame, ctx, session, changes)
   local receipt = frame.data.backend_recovery
   if not receipt then return nil end
-  local valid, why = M.validate_recovery(receipt, ctx)
+  local valid, why = M.validate_navigation(receipt, ctx)
   if not valid then return nil, why end
   -- Editing other settings keeps the ordinary Settings navigation. A targeted
   -- backend edit is the only transaction which completes this recovery step.
@@ -259,7 +268,7 @@ function M.applied_return(token, receipt)
     -- Bind the replacement Settings frame exactly as ordinary row rendering
     -- does, then use the same guarded navigation-only Return implementation.
     M.rows(frame, CE().profile(), session)
-    local valid, why = M.validate_recovery(receipt, session.ctx)
+    local valid, why = M.validate_navigation(receipt, session.ctx)
     if not valid then session.message, frame.data.message = why, why; return end
     local ok, reason = session.workspace_recover(receipt)
     if not ok then session.message, frame.data.message = reason, reason end

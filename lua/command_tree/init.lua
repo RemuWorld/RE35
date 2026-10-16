@@ -3,7 +3,7 @@ if vim.fn.has("nvim-0.11") ~= 1 then
 end
 local K = require("command_tree.keys")
 local Entry, Profile = require("command_tree.entry"), require("command_tree.profile")
-local M = { version = "0.2.3" }
+local M = { version = "0.3.0" }
 local Lifecycle = require("command_tree.environment.lifecycle")
 local Builder, Options = require("command_tree.environment.builder"), require("command_tree.environment.options")
 local lifecycle = Lifecycle.new(M)
@@ -28,7 +28,21 @@ end
 function M.close()
   local ok, err = lifecycle:admit()
   if not ok then return false, err end
-  local env = lifecycle:current(); if env then env.session:close() end
+  local env = lifecycle:current(); if env then return env.session:close() end
+end
+function M.suspend()
+  local ok, err = lifecycle:admit()
+  if not ok then return false, err end
+  local env = lifecycle:current()
+  if not env then return false, 'Command environment is not configured' end
+  return env.session:suspend()
+end
+function M.resume(opts)
+  local ok, err = lifecycle:admit()
+  if not ok then return nil, err end
+  local env = lifecycle:current()
+  if not env then return nil, 'Command environment is not configured' end
+  return env.session:resume(opts)
 end
 function M.disable() return lifecycle:disable() end
 function M.environment_token() return lifecycle:token() end

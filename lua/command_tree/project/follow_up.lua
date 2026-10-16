@@ -9,7 +9,21 @@ end
 local function context(ce)
   return ce.state().context or K.context()
 end
-local function capture(ce, task)
+local function capture(ce, task, inspection)
+  -- Inspection owns a retained task, not the command currently registered at
+  -- its ID. It must survive progress, source edits and presentation rebuilds.
+  if inspection then
+    local target
+    if type(task.process_target) == 'table' then
+      target = {}
+      for _, key in ipairs({'recipe_id','project','configuration','target'}) do
+        local value = rawget(task.process_target, key)
+        if value ~= nil and (type(value) ~= 'string' or #value == 0 or #value > 256 or value:find('%c')) then target = nil; break end
+        target[key] = value
+      end
+    end
+    return {task=task,id=task.id,command_id=task.command_id,target=target}
+  end
   local command = ce.registry():get(task.command_id)
   return {task=task,id=task.id,status=task.status,command_id=task.command_id,command=command,
     command_revision=command and command.process_revision,validator=command and command.process_validate_target,
@@ -17,15 +31,20 @@ local function capture(ce, task)
     parent_id=task.parent_id,recipe_id=task.recipe_id}
 end
 local function check(ce, receipt, proposal)
-  if not ce.is_current_environment(receipt.token) then return false, 'Follow-up environment changed; select it again' end
+  local token = receipt.inspection and ce.environment_token() or receipt.token
+  if not ce.is_current_environment(token) then return false, 'Follow-up environment changed; select it again' end
   if proposal and not vim.deep_equal(proposal, receipt.data) then return false, 'Follow-up proposal changed; select it again' end
   for _, saved in ipairs(receipt.tasks) do
-    local task, command = find(ce, saved.id), ce.registry():get(saved.command_id)
-    if task ~= saved.task or task.status ~= saved.status or task.command_id ~= saved.command_id
+    local task = find(ce, saved.id)
+    if task ~= saved.task or task.command_id ~= saved.command_id then
+      return false, 'Follow-up task or declaration changed; select it again'
+    end
+    local command = not receipt.inspection and ce.registry():get(saved.command_id) or nil
+    if not receipt.inspection and (task.status ~= saved.status
       or command ~= saved.command or (command and command.process_revision) ~= saved.command_revision
       or (command and command.process_validate_target) ~= saved.validator
       or task.process_revision ~= saved.revision or task.parent_id ~= saved.parent_id or task.recipe_id ~= saved.recipe_id
-      or not vim.deep_equal(task.args, saved.args) or not vim.deep_equal(task.process_target, saved.target) then
+      or not vim.deep_equal(task.args, saved.args) or not vim.deep_equal(task.process_target, saved.target)) then
       return false, 'Follow-up task or declaration changed; select it again'
     end
   end
@@ -38,7 +57,8 @@ local function check(ce, receipt, proposal)
 end
 local function readiness(receipt, action)
   local source, owner = receipt.tasks[1], receipt.owner
-  if action ~= 'details' and source.status == 'pending' then
+  local status = receipt.inspection and source.task.status or source.status
+  if action ~= 'details' and status == 'pending' then
     return 'unavailable', 'Wait for this task to finish'
   elseif action == 'recover' or action == 'review' then
     if not owner then return 'unavailable', 'Recipe parent task is no longer in retained history' end
@@ -66,9 +86,10 @@ function M.offer(id, action)
   if not task then return nil, 'Task is no longer in retained history' end
   local ctx = context(ce)
   if not K.valid(ctx) then return nil, 'Follow-up source context is no longer valid' end
-  local source = capture(ce, task)
+  local inspection = action == 'details' or action == 'results'
+  local source = capture(ce, task, inspection)
   local receipt = {tasks={source},owner=source,token=ce.environment_token(),buf=ctx.buf,win=ctx.win,
-    name=vim.api.nvim_buf_get_name(ctx.buf)}
+    name=vim.api.nvim_buf_get_name(ctx.buf),inspection=inspection}
   if (action == 'recover' or action == 'review') and source.parent_id then
     local parent = find(ce, source.parent_id)
     receipt.owner = parent and capture(ce, parent) or nil

@@ -23,6 +23,11 @@ Repair the source, then retry. Modified project files require a save decision:
 - **Run saved files** deliberately uses disk contents and leaves edits unsaved.
 - **Back** cancels this attempt without saving or launching.
 
+Run saved files permits unsaved edits while the choice is open. Selected saves
+require the exact reviewed contents, names and writable disk state of every
+chosen file; unrelated buffers need not remain unchanged. If a later selected
+write fails, the message lists files already saved and no task starts.
+
 A retry creates a new Task and retains the old failure. Changed declarations,
 renamed sources, replaced roots or stale reviews may prevent execution. Use
 original-choice review to inspect a fresh invocation with current tools, or
@@ -32,6 +37,12 @@ does not run anything; Run remains explicit.
 A remedy opens owned source locations when available, or the relevant Settings
 for inspection. An unclassified process failure is not automatically diagnosed
 as a missing dependency. The message states when its cause is unknown.
+
+Opening a retained Task or its Results is inspection: source edits and appearance
+changes do not require execution consent. Evicted tasks cannot be reopened by
+reusing their IDs, and a result location is checked before navigation. Returning
+from Settings refreshes the source context and command availability; it never
+saves a file or executes the old command. Retry is a separate checked action.
 
 The optional VS Code host exposes this workflow through native Task/Results
 menus and **RE35: Recover Original Task**. See its

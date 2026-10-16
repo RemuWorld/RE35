@@ -48,7 +48,7 @@ paths and no personal configuration modules:
 | `test_input.lua` | Typed input, completion, review, Unicode paste, secrets, async prompts and cleanup |
 | `test_session.lua` | Review/edit flow, navigation, density/layout, cursor viewport and hidden command rejection |
 | `test_workspaces.lua` | Remapped board keys, Results refresh/reselection, workspace filters and window cleanup |
-| `test_backend_recovery.lua` | Real saved-file search, Settings review/apply/return, stale-context rejection and no implicit execution |
+| `test_backend_recovery.lua` | Real saved-file search, navigation-only Settings return, strict dormant-query execution checks and no implicit execution |
 
 Top-level fixtures cover changes for the current release. The protocol fixture
 sets the global `vim` API to `nil` while exercising the portable engine, so an
@@ -59,8 +59,13 @@ interaction checks or performance measurements used for a release.
 | Current fixture | Checks |
 | --- | --- |
 | `test_theme_persistence.lua` / `test_theme_startup.lua` | Actual save/rollback failures, strict host-local state, confirmed theme restoration across fresh editor processes, custom ownership and disabled/stale startup hooks |
+| `test_theme_appearance.lua` | Native theme Light/Dark and preview controls across densities, exact confirmed persistence, cancellation/preview failure/storage failure and legacy adapter behavior |
 | `test_navigation_feedback.lua` | Shared list wrapping, option-off clamping, full error inspection/return, restoration failure refusal, independent detail scrolling and native Editor return |
 | `test_fixed_panels.lua` | Stable main geometry, independent bounded details, legacy/preset and three-density behavior, tiny critical-scene refusal and complete window cleanup |
+| `test_view_plan.lua` | Shared fresh review/render page budgets, fixed/dynamic geometry, Unicode multi-page facts and narrow resize refusal/recovery without planning-time views |
+| `test_view_model.lua` | One renderer for local/preset input, historical large local bounds and row ceilings, preserved preferences and fresh scene/resize normalization |
+| `test_panel_plan.lua` | Pure optional guide placement, exact review/page agreement, narrow fallback, failed allocation cleanup and conservative fresh admission |
+| `test_picker_navigation.lua` | Real Session page keys, actual-capacity/clamped selection, stable search identity and input-control callback retirement/reentry |
 | `test_shortcut_hints.lua` | Complete configurable key chords, grouped help spans, narrow wrapping, visible overflow controls and plain adapter-help compatibility |
 | `test_shortcut_guide.lua` | Right/below guide placement, complete controls, source bounds, editor focus and failed/stale float cleanup |
 | `test_status_placement.lua` | Explicit confirmation ownership, neutral title status, narrow fallback, Minimal policy and retained failure diagnostics |
@@ -100,11 +105,14 @@ interaction checks or performance measurements used for a release.
 | `test_navigation_lifecycle.lua` | Back during workspace lifecycle reentry, cleanup failure and source receipt drift |
 | `test_file_scan_lifecycle.lua` | Saved-file bounds, hidden/generated entries, changed targets, real asynchronous read races/cancellation and symlink exclusion |
 | `test_follow_up.lua` | Editor-independent proposal bounds and one-use host receipts, callback mutation/reentry refusal and original parent/child recovery ownership |
+| `test_effect_navigation.lua` | Retained-task inspection across edits/environment replacement, eviction/ID-reuse refusal and fresh Settings-to-Inspect context without execution |
+| `test_effect_execution.lua` | Scoped recipe continuation across unrelated edits/settings, relevant declaration/source refusal, current provider ownership, cancellation and final-child outcomes |
+| `test_effect_replay.lua` | Saved-input replay, exact selected-save consent, all-selection prevalidation, write-hook races and conservative custom command behavior |
 | `test_search_provider.lua` | Editor-independent provider request/options, availability, provenance, strict data and limit validation |
 | `test_search_provider_host.lua` | Actual builtin retained search, changed project-root replay refusal, explicit restored-scope retry and missing ripgrep refusal without fallback |
 | `test_ripgrep_boundary.lua` | Controlled streamed transport, JSON ordering/summary and Unicode-byte checks, physical containment, output/read limits and partial-result reporting |
 | `test_core_manifest.lua` | Shared native/installation source list, unique module identities and complete portable core coverage |
-| `test_profile_contract.lua` | Editor-independent full profile normalization, strict object/list identity, declaration preservation, sensitive/runtime refusal and data-only bridge operations |
+| `test_profile_contract.lua` | Editor-independent full profile normalization, strict schemas, declaration ID preservation, sensitive/runtime refusal in submitted preset values and data-only bridge operations |
 | `test_workflow_contract.lua` | Shared tool/project/recipe bounds, logical choices and exact argv substitution without editor or execution authority |
 | `test_bridge_optional_rules.lua` | Document-only bridge initialization leaves optional profile/workflow/search rules unloaded; first use validates through the same pure rules without execution |
 

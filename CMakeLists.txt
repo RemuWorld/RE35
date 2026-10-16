@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
-project(command_environment_bridge VERSION 0.2.3 LANGUAGES C CXX)
+project(command_environment_bridge VERSION 0.3.0 LANGUAGES C CXX)
 find_package(Threads REQUIRED)
 # The loader and installed core must use the same source list. Reject drift
 # during configuration instead of producing a bridge missing a Lua dependency.

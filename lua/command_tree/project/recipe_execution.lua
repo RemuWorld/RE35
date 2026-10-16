@@ -1,9 +1,13 @@
 -- Reviewed recipe dispatch and the lifetime of owned child operations.
--- Environment replacement keeps this coordinator bound to its prepared host.
+-- A retained coordinator resolves each new step through the current host.
 local Project, Replay = require('command_tree.project'), require('command_tree.project_task')
 local K = require('command_tree.keys')
+local Model = require('command_tree.project.recipe_model')
 local Results = require('command_tree.project.recipe_results')
 local M = {}
+-- Registries already own their command closures and managers. This lookup
+-- transfers no lifetime or authority to a retired/prepared environment.
+local managers=setmetatable({},{__mode='kv'})
 local function copy(value) return vim.deepcopy(value) end
 local function ce() return require('command_tree') end
 local failure = Results.failure
@@ -82,6 +86,8 @@ local function execute_recipe(self,id,ctx,args,done,parent)
     done(false,'Recipe arguments do not match the reviewed plan');return
   end
   local active,closed,cancelled,index,timer=nil,false,false,0,nil
+  local executor=self.env.executor
+  local parent_id,parent_args=parent.id,copy(parent.args)
   local scope,scope_message=require('command_tree.host.process').scope(self.env.options.process_helper)
   local aggregate=Results.new(id,plan,scope)
   local result=aggregate.result
@@ -90,7 +96,6 @@ local function execute_recipe(self,id,ctx,args,done,parent)
   parent.source_buf=Replay.source_buffer(plan)
   require('command_tree.project.recipe_recovery').capture(self,parent)
   parent.process_scope_message='Sequential steps: '..scope_message
-  local profile,setup,disk=copy(self.env.profile),copy(self.env.setup_opts),copy(self.env.disk_profile)
   local snapshot,snapshot_error=Replay.capture(plan,ctx)
   local function finish(ok,why)
     if closed then return end
@@ -104,32 +109,57 @@ local function execute_recipe(self,id,ctx,args,done,parent)
   end
   local function guard()
     if not snapshot then return false,snapshot_error end
-    if ce().registry()~=self.env.registry or not vim.deep_equal(ce().profile(),profile)
-      or not vim.deep_equal(self.env.setup_opts,setup)then return false,'Settings changed during the recipe; no next step was started'end
-    if self.env.profile_path then
-      local value,why=require('command_tree.profile').read(self.env.profile_path)
-      if not value or not vim.deep_equal(value,disk)then return false,'Saved profile changed during the recipe: '..tostring(why or 'reload Project')end
+    if not ce().environment_token() or ce().registry()~=executor.registry then
+      return false,'Command environment was disabled; no next step was started'
     end
-    local valid,why=self:validate_target(plan)
+    local current=managers[executor.registry]
+    if not current or current.env.executor~=executor
+      or current.env.registry:get('recipe.'..id)~=current.parent_commands[id] then
+      return false,'Recipe provider changed; no next step was started'
+    end
+    local retained=false
+    for _,operation in ipairs(executor:list())do if operation==parent then retained=true;break end end
+    if not retained or parent.id~=parent_id or parent.status~='pending' or parent.command_id~='recipe.'..id or parent.recipe_id~=id
+      or parent.process_revision~=plan.recipe_revision or not vim.deep_equal(parent.args,parent_args)
+      or not vim.deep_equal(parent.process_target,plan)then
+      return false,'Recipe no longer owns its reviewed running parent'
+    end
+    local revision,why=Model.profile_revision(current.env.profile,current.env.options,id)
+    if revision~=plan.recipe_revision then return false,why or 'Recipe configuration changed; no next step was started'end
+    if current.env.profile_path then
+      local value,failure=require('command_tree.profile').read(current.env.profile_path)
+      local saved,saved_error
+      if value then saved,saved_error=Model.profile_revision(value,current.env.options,id)end
+      local expected,expected_error=Model.profile_revision(current.env.disk_profile,current.env.options,id)
+      if not value or saved==nil or expected==nil or saved~=expected then
+        return false,'Saved recipe configuration changed during the recipe: '..tostring(failure or saved_error or expected_error or 'reload Project')
+      end
+    end
+    local valid
+    valid,why=current:validate_target(plan)
     if not valid then return false,why end
-    return Replay.check_snapshot(plan,ctx,snapshot)
+    valid,why=Replay.check_snapshot(plan,ctx,snapshot)
+    if not valid then return false,why end
+    return current
   end
   local next_step
   next_step=function()
     if closed then return end
     if cancelled then finish(false,'Cancelled');return end
-    local valid,why=guard()
-    if not valid then finish(false,why);return end
+    -- A finished final child has no further launch to admit. Later unrelated
+    -- settings or editor changes cannot rewrite its actual successful result.
+    if index>=#plan.steps then finish(true);return end
+    local current,why=guard()
+    if not current then finish(false,why);return end
     index=index+1
-    if index>#plan.steps then finish(true);return end
     local step=plan.steps[index]
-    local command=self.env.registry:get(step.command_id)
-    if not command then finish(false,'Step provider is missing: '..step.command_id);return end
+    local command=current.env.registry:get(step.command_id)
+    if not command or command~=current.child_commands[step.command_id] then finish(false,'Step provider changed or is missing: '..step.command_id);return end
     parent.step_index,parent.step_id=index,step.id
     local child_target=copy(step.target);child_target.parent_task_id=parent.id
-    local previous_dispatch=self.dispatch
-    self.dispatch={command_id=step.command_id,parent_id=parent.id}
-    local safe,accepted,detail,operation=pcall(self.env.executor.execute,self.env.executor,step.command_id,{},ctx,function(ok,output,child)
+    local previous_dispatch=current.dispatch
+    current.dispatch={command_id=step.command_id,parent_id=parent.id,parent=parent}
+    local safe,accepted,detail,operation=pcall(executor.execute,executor,step.command_id,{},ctx,function(ok,output,child)
       active=nil
       parent.last_step_id,parent.step_id=step.id,nil
       if child then
@@ -142,7 +172,7 @@ local function execute_recipe(self,id,ctx,args,done,parent)
       if not ok or cancelled then finish(false,cancelled and 'Cancelled' or ('Step '..step.id..' failed: '..failure(output)));return end
       vim.schedule(next_step)
     end,{process_target=child_target})
-    self.dispatch=previous_dispatch
+    current.dispatch=previous_dispatch
     if not safe then finish(false,'Step '..step.id..' could not start: '..failure(accepted));return end
     if operation then
       operation.parent_id,operation.recipe_id,operation.step_id=parent.id,id,step.id
@@ -154,7 +184,7 @@ local function execute_recipe(self,id,ctx,args,done,parent)
   parent:on_cancel(function()
     if closed then return false,'Recipe already finished'end
     if active and active.status=='pending'then
-      local ok,why=self.env.executor:cancel(active.id)
+      local ok,why=executor:cancel(active.id)
       if not ok then return false,why end
       cancelled=true;parent.cancel_deadline=active.cancel_deadline
       if parent.cancel_deadline then
@@ -171,15 +201,16 @@ local function execute_recipe(self,id,ctx,args,done,parent)
   end)
   parent:on_force_cancel(function()
     if not active or active.status~='pending'then return false,'No owned running recipe step needs force termination'end
-    return self.env.executor:force_cancel(active.id)
+    return executor:force_cancel(active.id)
   end)
   next_step()
 end
 function M.register(self)
   self.run,self.rerun=M.run,M.rerun
   self.available_selected,self.run_selected=M.available_selected,M.run_selected
-  self.parent_commands={}
+  self.parent_commands,self.child_commands={},{}
   local env,projects,recipes=self.env,self.projects,self.recipes
+  managers[env.registry]=self
   for id,recipe in pairs(recipes)do
     for _,step in ipairs(recipe.steps)do
       local ok,tool=pcall(self.tool,self,step)
@@ -189,8 +220,10 @@ function M.register(self)
           local backend,backend_available=command.run,command.available
           command.id,command.name,command.persistent,command.hidden=child_id,recipe.name..' / '..step.name,false,true
           command.arguments=nil
+          command.process_profile_revision=function(profile)return Model.profile_revision(profile,env.options,id)end
           command.available=function(ctx)
-            if not self.dispatch or self.dispatch.command_id~=child_id then
+            if not self.dispatch or self.dispatch.command_id~=child_id
+              or not self.dispatch.parent or self.dispatch.parent.status~='pending' then
               return false,'Recipe steps run only through their reviewed parent'
             end
             return backend_available(ctx)
@@ -201,11 +234,14 @@ function M.register(self)
             local parent
             for _,operation in ipairs(env.executor:list())do if operation.id==target.parent_task_id then parent=operation;break end end
             if not parent or parent.status~='pending' or parent.command_id~='recipe.'..id
-              or parent.recipe_id~=id or parent.step_id~=step.id then return false,'Recipe step is not the current stage of its running parent'end
+              or parent.recipe_id~=id or parent.step_id~=step.id or not self.dispatch or self.dispatch.parent~=parent then
+              return false,'Recipe step is not the current stage of its running parent'
+            end
             local valid,plan=self:validate_target(parent.process_target)
             if not valid then return false,plan end
             local expected
             for _,item in ipairs(plan.steps)do if item.id==step.id then expected=copy(item.target);break end end
+            if not expected then return false,'Recipe step is no longer declared'end
             expected.parent_task_id=parent.id
             if not vim.deep_equal(expected,target)then return false,'Recipe step target does not match its reviewed parent'end
             local stat=target and vim.uv.fs_stat(target.cwd)
@@ -220,6 +256,8 @@ function M.register(self)
             end,invocation)
           end
           env.registry:register(command)
+          self.child_commands[child_id]=env.registry:get(child_id)
+          Project.bind_execution_scope(self.child_commands[child_id],command.process_profile_revision)
         end},{step=tool},{},env.options.process_helper)
       end
     end
@@ -235,6 +273,7 @@ function M.register(self)
     end
     env.registry:register({id='recipe.'..id,name=recipe.name,recipe_id=id,provider='project',type='action',backend='process',async=true,
       arguments=fields,process_revision=self.revisions[id],
+      process_profile_revision=function(profile)return Model.profile_revision(profile,env.options,id)end,
       process_resolve_target=function(ctx,args)return self:resolve(id,ctx,args)end,
       process_validate_target=function(target)
         if type(target)~='table' or target.recipe_id~=id then return false,'Recipe target belongs to a different declaration'end
@@ -244,6 +283,7 @@ function M.register(self)
       available=function(ctx)return self:available(id,ctx)end,
       run=function(ctx,args,done,invocation)return execute_recipe(self,id,ctx,args,done,invocation)end})
     self.parent_commands[id]=env.registry:get('recipe.'..id)
+    Project.bind_execution_scope(self.parent_commands[id],self.parent_commands[id].process_profile_revision)
   end
   -- An empty profile's lazy manager may materialize after profile overrides.
   -- It must not introduce command metadata or resurrect a disabled binding.

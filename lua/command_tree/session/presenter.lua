@@ -180,6 +180,20 @@ function M.attach(self)
       end
       data.help = input.choices and (field.kind == "multiselect" and "Space Toggle  ·  Enter Accept  ·  / Filter  ·  Esc Back" or "Enter Select  ·  / Filter  ·  F1 View  ·  Esc Back")
         or ("Enter Next / Run  ·  Tab Complete  ·  ↑/↓ History  ·  Esc Back")
+      if input.choices then
+        data.help = data.help .. '  ·  ' .. Guide.hint_pair(self.options.keys.page_up or '<PageUp>', self.options.keys.page_down or '<PageDown>') .. ' Page'
+        local attachment = state.input_attachment
+        local status = self:input_status()
+        -- A native presentation hook may synchronously close, replace or
+        -- reattach its Session. Never reopen the retired view from old data.
+        if not self:is_attached(state, attachment) or state.mode ~= 'input' or state.input ~= input
+          or not input.callback and self.registry:get(input.command.id) ~= input.command then return end
+        if status then
+          if status.label and status.label ~= '' then data.label = status.label .. ' · ' .. data.label end
+          if status.help and status.help ~= '' then data.help = data.help .. '  ·  ' .. status.help end
+          if status.description and status.description ~= '' then data.details = { description = status.description } end
+        end
+      end
       if not field.required and not input.callback then data.help = data.help .. "  ·  Ctrl-s Skip" end
       if data.diagnostic then data.help = data.help .. '  ·  ' .. K.label(self.options.keys.inspect or '<C-h>') .. ' Inspect error' end
     else

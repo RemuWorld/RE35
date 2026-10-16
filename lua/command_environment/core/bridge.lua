@@ -1,6 +1,7 @@
 local U = require('command_environment.core.util')
 local J = require('command_environment.core.json')
 local Index = require('command_environment.core.index')
+local Descriptor = require('command_environment.core.command_descriptor')
 local Engine = require('command_environment.core.engine')
 local Navigation = require('command_environment.core.navigation')
 local Document = require('command_environment.core.document')
@@ -28,44 +29,6 @@ local function refusal(value, reason)
   end
   return nil, reason
 end
-local function descriptor(spec)
-  assert(type(spec) == 'table' and U.kind(spec) ~= 'array', 'Command descriptor must be an object')
-  local allowed = { id=true, name=true, description=true, type=true, provider=true, source=true, aliases=true, path=true,
-    arguments=true, capabilities=true, cancellable=true, icon=true }
-  for key in pairs(spec) do assert(allowed[key], 'Unknown command descriptor field: ' .. tostring(key)) end
-  if spec.capabilities then U.assert_array(spec.capabilities, 'Capabilities'); for _, name in ipairs(spec.capabilities) do assert(type(name) == 'string' and name ~= '', 'Capability must be nonempty text') end end
-  assert(spec.cancellable == nil or type(spec.cancellable) == 'boolean', 'cancellable must be a boolean')
-  if spec.arguments then
-    U.assert_array(spec.arguments, 'Command arguments')
-    assert(#spec.arguments <= 64, 'Command arguments exceed 64 fields')
-    local names, kinds = {}, { text=true, path=true, number=true, boolean=true, select=true, multiselect=true }
-    local fields = { name=true, kind=true, prompt=true, required=true, integer=true, min=true, max=true, items=true }
-    for _, field in ipairs(spec.arguments) do
-      assert(type(field) == 'table' and U.kind(field) ~= 'array' and U.kind(field) ~= 'null', 'Argument must be an object')
-      for key in pairs(field) do assert(fields[key], 'Unknown argument field: ' .. tostring(key)) end
-      assert(type(field.name) == 'string' and field.name ~= '' and #field.name <= 64 and not field.name:find('\0', 1, true), 'Invalid argument name')
-      assert(not names[field.name], 'Duplicate argument name: ' .. field.name); names[field.name] = true
-      assert(field.kind == nil or kinds[field.kind], 'Unknown argument kind')
-      assert(field.prompt == nil or type(field.prompt) == 'string', 'Argument prompt must be text')
-      for _, flag in ipairs({ 'required', 'integer' }) do assert(field[flag] == nil or type(field[flag]) == 'boolean', 'Argument ' .. flag .. ' must be boolean') end
-      for _, bound in ipairs({ 'min', 'max' }) do assert(field[bound] == nil or type(field[bound]) == 'number', 'Argument bound must be a finite number') end
-      assert(not field.min or not field.max or field.min <= field.max, 'Argument min must not exceed max')
-      if field.items then
-        U.assert_array(field.items, 'Static choices'); assert(#field.items <= 4096, 'Static choices exceed 4096')
-        for _, item in ipairs(field.items) do
-          if type(item) == 'table' then
-            assert(U.kind(item) ~= 'array' and U.kind(item) ~= 'null', 'Choice must be a value or labeled object')
-            for key in pairs(item) do assert(key == 'label' or key == 'value', 'Unknown choice field') end
-            assert(item.label == nil or type(item.label) == 'string', 'Choice label must be text')
-            item = item.value
-          end
-          assert(type(item) == 'string' or type(item) == 'boolean' or type(item) == 'number', 'Choice values must be scalar')
-        end
-      end
-    end
-  end
-  return spec
-end
 local function document_page_request(data, fields, label)
   label = label or 'Document page request'
   assert(type(data) == 'table' and (getmetatable(data) == nil or U.kind(data) == 'object'),
@@ -76,7 +39,7 @@ end
 local function dispatch(op, data)
   assert(engine, 'Bridge has not been initialized')
   if op ~= 'snapshot' and op ~= 'dispose' then engine:live() end
-  if op == 'register' then return engine.index:register(descriptor(data)) end
+  if op == 'register' then return engine.index:register(Descriptor.protocol(data)) end
   if op == 'unregister' then return engine.index:unregister(data.id) end
   if op == 'configure' then engine.index:configure(data); return true end
   if op == 'bind' then engine.index:bind(data.path, data.id, data.options); return true end

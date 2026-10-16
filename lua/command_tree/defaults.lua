@@ -213,6 +213,7 @@ function M.register(registry, opts)
       arguments = { { name = "theme", prompt = "Theme", kind = "select", required = true,
         items = theme.items, default = theme.current } },
       preview = theme.preview,
+      input_ui = theme.input_ui,
       run = theme.commit,
     })
     registry:bind({ "u", "t" }, "ui.theme")

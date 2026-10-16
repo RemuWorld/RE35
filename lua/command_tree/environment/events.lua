@@ -1,5 +1,5 @@
 -- Own editor hooks and the entry boundary for one live environment.
-local K, V = require('command_tree.keys'), require('command_tree.view')
+local V = require('command_tree.view')
 local T, Entry = require('command_tree.triggers'), require('command_tree.entry')
 local M = {}
 function M.clear()
@@ -38,11 +38,7 @@ function M.install(env, api, current)
   end })
   vim.api.nvim_create_autocmd({ "WinClosed", "BufWipeout", "WinEnter" }, { group = group, callback = function(ev)
     if current() ~= env then return end
-    local state = env.session.active
-    if not state then return end
-    local closed = ev.event == "WinClosed" and tonumber(ev.match)
-    if not K.valid(state.ctx) or (closed and (closed == state.ctx.win or closed == state.view.win))
-      or (ev.event == "WinEnter" and vim.api.nvim_get_current_win() ~= state.ctx.win) then env.session:close() end
+    env.session:editor_event(ev)
   end })
   vim.api.nvim_create_user_command("CommandEnvironment", function(cmd)
     if cmd.args == "" then api.open() else api.execute(cmd.args) end

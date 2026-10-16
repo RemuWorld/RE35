@@ -4,7 +4,7 @@ local M = {}
 local defaults = {
   delay = 200, auto = false, auto_modes = {}, operator_help = false, open_key = "\\",
   keys = { execute = "<CR>", search = "/", detail = "?", workspaces = "<C-w>", recent = "<C-r>", favorites = "<C-b>", favorite = "<C-f>", words = "<C-l>", inspect = "<C-h>",
-    details_down = "<S-PageDown>", details_up = "<S-PageUp>" },
+    details_down = "<S-PageDown>", details_up = "<S-PageUp>", page_down = "<PageDown>", page_up = "<PageUp>" },
   providers = { builtin = true, lsp = true, plugins = true, runner = true, ex = true, keymaps = true, native = true },
   groups = { ["<leader>"] = "Leader", ["<leader>c"] = "Code", ["<leader>r"] = "Run / rename", ["<leader>u"] = "UI", ["<leader>b"] = "Buffers" },
   window = { density = "full", width = 48, max_width = 88, max_height = 16, icons = true, position = "center",

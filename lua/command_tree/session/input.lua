@@ -15,6 +15,53 @@ end
 M.value, M.context = field_value, input_context
 
 function M.attach(self, dispatch_submission)
+  local function current_control(state, input, command, ctx, attachment, index)
+    return self:is_attached(state, attachment or state.input_attachment)
+      and state.mode == 'input' and state.input == input and not input.retired
+      and not input.callback and self.registry:get(command.id) == command and input_context(state) == ctx
+      and (index == nil or input.index == index) and K.valid(ctx)
+  end
+  local function control_call(state, input, name, ...)
+    local command, ctx, attachment, index = input.command, input_context(state), state.input_attachment, input.index
+    local controls = command.input_ui
+    if type(controls) ~= 'table' or type(controls[name]) ~= 'function' then return nil, false end
+    local values = { ... }
+    local ok, result = pcall(vim.api.nvim_win_call, ctx.win, function()
+      return controls[name](vim.deepcopy(ctx), vim.deepcopy(input.args), unpack(values))
+    end)
+    if not current_control(state, input, command, ctx, attachment, index) then return nil, true end
+    if not ok then self:record_feedback('Input control', result, command); return nil, true end
+    if result ~= nil and type(result) ~= 'table' then
+      self:record_feedback('Input control', 'Input controls must return a draft table or nil', command)
+      return nil, true
+    end
+    return result and vim.deepcopy(result), result ~= nil
+  end
+  function self:input_control(key)
+    local state, input = self.active, self.active and self.active.input
+    if not input or input.callback or not input.choices or input.filtering then return false end
+    local command, ctx, attachment, index = input.command, input_context(state), state.input_attachment, input.index
+    if not current_control(state, input, command, ctx) then return false end
+    local patch, handled = control_call(state, input, 'handle', key, vim.deepcopy(field_value(input)))
+    if not patch then return handled end
+    -- Preview cleanup must finish before a new appearance draft can take over.
+    if not self:clear_preview() or not current_control(state, input, command, ctx, attachment, index) then return true end
+    input.args = vim.tbl_extend('force', {}, input.args, patch)
+    self:preview_input()
+    return true
+  end
+  function self:input_status()
+    local state, input = self.active, self.active and self.active.input
+    if not input or input.callback or not input.choices then return nil end
+    if not current_control(state, input, input.command, input_context(state)) then return nil end
+    local status = control_call(state, input, 'status', vim.deepcopy(field_value(input)))
+    if not status then return nil end
+    local out = {}
+    for _, name in ipairs({ 'label', 'help', 'description' }) do
+      if type(status[name]) == 'string' then out[name] = vim.fn.strcharpart(status[name], 0, 1024) end
+    end
+    return out
+  end
   local function refresh_presentation(state, input)
     if state.view.presentation_options then
       local mode = state.mode
@@ -71,8 +118,14 @@ function M.attach(self, dispatch_submission)
 
   function self:input_field()
     local state, input = self.active, self.active.input
-    local ctx = input_context(state)
+    local ctx, attachment, index = input_context(state), state.input_attachment, input.index
     assert(K.valid(ctx), "Input target changed; reopen the command")
+    if not input.callback and not input.ui_initialized then
+      input.ui_initialized = true
+      local patch = control_call(state, input, 'init')
+      if not current_control(state, input, input.command, ctx, attachment, index) then return end
+      if patch then input.args = vim.tbl_extend('force', {}, input.args, patch) end
+    end
     local field = input.command.arguments[input.index]
     local value = input.drafts[field.name]
     if value == nil then value = input.args[field.name] end
@@ -108,19 +161,20 @@ function M.attach(self, dispatch_submission)
 
   function self:request_field(field, options, callback, context)
     local state = self.active
-    if not state then callback(nil); return end
+    if not state or self.transitioning then callback(nil); return end
+    local attachment = state.input_attachment
     local origin = state.input
     self:push_mode("input")
     local input = { command = { name = options.prompt or "Input", arguments = { field } },
       args = {}, drafts = {}, index = 1, callback = callback, preview = options.preview,
-      context = vim.deepcopy(context or state.ctx) }
+      context = vim.deepcopy(context or state.ctx), parent = origin }
     state.input = input
     local cleaned = false
     input.cleanup = function()
-      if cleaned then return end
+      if cleaned or input.retired then return end
       cleaned = true
       input.callback = nil
-      if self.active == state and state.input == input then
+      if self:is_attached(state, attachment) and state.input == input then
         self:clear_preview()
         self:pop_mode(true)
         state.input = origin
@@ -146,7 +200,8 @@ function M.attach(self, dispatch_submission)
   end
 
   function self:accept_input(skip)
-    local state, input = self.active, self.active.input
+    local state, input = self.active, self.active and self.active.input
+    if not input or input.retired then return false, 'Input is no longer attached' end
     if not refresh_presentation(state, input) then return end
     if state.view.presentation_input_complete == false then
       state.message = state.view.presentation_input_reason
@@ -212,7 +267,8 @@ function M.attach(self, dispatch_submission)
   end
 
   function self:execute_review()
-    local state, input = self.active, self.active.input
+    local state, input = self.active, self.active and self.active.input
+    if not input or input.retired then return false, 'Review is no longer attached' end
     if not refresh_presentation(state, input) then return end
     if state.view.presentation_review_complete == false then
       state.message = state.view.presentation_review_reason
@@ -314,8 +370,9 @@ function M.attach(self, dispatch_submission)
     local value = table.concat(lines, "\n")
     if state.mode == "search" or state.mode == "words" or state.mode == "selector" and state.selector_filtering then
       value = value:gsub("[\r\n]", " ")
+      local previous = state.query
       state.query, state.query_cursor = Text.insert(state.query or "", state.query_cursor, value)
-      state.selected, state.selected_id = 1, nil
+      if state.mode == 'selector' and previous ~= state.query then state.selected = 1 end
     elseif state.mode == "input" then
       local input = state.input
       if value:find("[\r\n]") then state.message = "This field accepts one line; multiline paste was ignored"

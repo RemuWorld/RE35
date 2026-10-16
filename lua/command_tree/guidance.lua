@@ -51,7 +51,7 @@ function M.register(registry, options)
     provider = 'builtin', type = 'workspace', workspace = 'help', path = { 's', 'g' } })
   registry:register({ id = 'help.integrations', name = 'Integration diagnostics', description = 'Read-only status for this source; nothing is installed or executed',
     provider = 'builtin', type = 'workspace', workspace = 'help', workspace_options = { section = 'integrations' }, path = { 's', 'v' } })
-  registry:register({ id = 'workspace.editor', name = 'Return to editor', description = 'Close RE35 and return to the original Neovim editing window',
+  registry:register({ id = 'workspace.editor', name = 'Return to editor', description = 'Suspend command navigation and return to Neovim; leave an active workspace first',
     provider = 'builtin', type = 'workspace', workspace = 'editor' })
 end
 local function items(frame)

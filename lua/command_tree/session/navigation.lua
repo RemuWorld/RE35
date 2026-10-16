@@ -64,8 +64,7 @@ local function capture_settings_navigation(state)
   end
   local ctx, token = state.ctx, {}
   settings_navigation[token] = { origin = origin, frames = frames, source = { buf = ctx.buf, win = ctx.win,
-    name = vim.api.nvim_buf_get_name(ctx.buf), tick = vim.api.nvim_buf_get_changedtick(ctx.buf),
-    filetype = vim.bo[ctx.buf].filetype, cursor = vim.api.nvim_win_get_cursor(ctx.win) } }
+    name = vim.api.nvim_buf_get_name(ctx.buf) } }
   return token
 end
 local function validate_settings_navigation(token, ctx)
@@ -73,13 +72,15 @@ local function validate_settings_navigation(token, ctx)
   if not receipt then return nil, 'Original command return receipt is no longer available' end
   local source = receipt.source
   if not K.valid(ctx) or ctx.buf ~= source.buf or ctx.win ~= source.win
-    or vim.api.nvim_buf_get_name(source.buf) ~= source.name
-    or vim.api.nvim_buf_get_changedtick(source.buf) ~= source.tick
-    or vim.bo[source.buf].filetype ~= source.filetype
-    or not vim.deep_equal(vim.api.nvim_win_get_cursor(source.win), source.cursor) then
+    or vim.api.nvim_buf_get_name(source.buf) ~= source.name then
     return nil, 'Original command source changed; returned to the command home'
   end
-  return receipt
+  -- Returning to Inspect grants navigation only. Fresh source facts feed later
+  -- availability and explicit Run; no old cursor, text revision or form returns.
+  local ok, fresh = pcall(K.call, ctx, K.context)
+  if not ok or not K.valid(fresh) then return nil, 'Original command source changed; returned to the command home' end
+  return { origin = vim.deepcopy(receipt.origin), frames = vim.deepcopy(receipt.frames),
+    source = vim.deepcopy(source), context = fresh }
 end
 
 local function snapshot(state)
@@ -131,13 +132,7 @@ function M.attach(self)
     if definition and definition.destination == 'editor' then
       local state = self.active
       if not state or not K.valid(state.ctx) then return false, 'Original editor window is no longer available' end
-      if state.workspace_mutating then return false, 'Workspace lifecycle is already changing' end
-      if not self:clear_preview() then return false, state.message end
-      local win = state.ctx.win
-      self:close()
-      if not vim.api.nvim_win_is_valid(win) then return false, 'Original editor window is no longer available' end
-      local ok, why = pcall(vim.api.nvim_set_current_win, win)
-      return ok, not ok and tostring(why) or nil
+      return self:suspend()
     end
     local state, origin = self.active, snapshot(self.active)
     local frame, err, pushed = self.workspaces:push(state, id, options)
@@ -187,6 +182,8 @@ function M.attach(self)
         if self.active ~= state then return false, 'Command session changed during workspace cleanup' end
       end
       table.remove(state.workspace_returns)
+      -- Cleanup hooks may change the source after the first admission check.
+      if receipt then receipt, return_error = validate_settings_navigation(state.settings_navigation, state.ctx) end
       if return_error then
         state.frames, state.settings_navigation, state.settings_navigation_error = {}, nil, nil
         state.ctx = K.context()
@@ -194,7 +191,7 @@ function M.attach(self)
         state.message = return_error
       else
         restore(state, origin or { mode = "tree", path = {}, page = 1, selected = 1 })
-        if receipt then state.settings_navigation = nil end
+        if receipt then state.ctx, state.settings_navigation = receipt.context, nil end
         if pop_error then state.message = pop_error end
       end
       state.navigation = (state.navigation or 0) + 1

@@ -138,23 +138,6 @@ local function dense_height(V, data, opts, model, width, border, maximum)
   return math.min(maximum, slots + chrome + vertical * 2)
 end
 
-function M.critical_options(data, opts)
-  if opts.layout ~= 'fixed' or opts.presentation then return opts end
-  if not (data.input or data.review or data.required_review or data.required_label or data.target or data.required_notice
-    or type(data.required_facts) == 'table' and next(data.required_facts) ~= nil) then return opts end
-  -- Factory rendering supplies the same admission/wrapping rules to ordinary
-  -- local setup. This is a private display model, never a selected/saved preset.
-  local density = opts.density or 'full'
-  local model = assert(require('command_environment.core.presentation').resolve(nil, density))
-  for _, field in ipairs({ 'width', 'max_width', 'max_height', 'position' }) do
-    if opts[field] ~= nil then model.layout[field] = opts[field] end
-  end
-  if opts.icons ~= nil then model.information.icons = opts.icons end
-  if density == 'compact' and opts.compact_rows then model.layout.rows = opts.compact_rows
-  elseif density == 'minimal' and opts.minimal_rows then model.layout.rows = opts.minimal_rows end
-  return vim.tbl_extend('force', {}, opts, { presentation = model, _legacy_critical = true })
-end
-
 local function bounds(opts)
   if opts.target_win and vim.api.nvim_win_is_valid(opts.target_win) then
     local pos = vim.api.nvim_win_get_position(opts.target_win)
@@ -214,9 +197,12 @@ end
 function M.prepare(V, view, data, opts)
   if opts.layout ~= 'fixed' then
     view.panel_report = nil
+    if opts._fixed_panel then
+      opts = vim.tbl_extend('force', {}, opts)
+      opts._fixed_panel = nil
+    end
     return data, opts
   end
-  opts = M.critical_options(data, opts)
   local model = opts.presentation
   local layout = model and model.layout or opts
   local density = layout.density or 'full'
@@ -235,7 +221,8 @@ function M.prepare(V, view, data, opts)
     -- Reserve a page of selectable rows, rather than sizing to the current
     -- selection or last page. Dense modes need only their actual chrome;
     -- descriptions and errors use the independently reserved details panel.
-    desired = dense_height(V, data, opts, model, width, border, maximum_height)
+    local dense_model = not (opts._display and opts._display.legacy_geometry) and model or nil
+    desired = dense_height(V, data, opts, dense_model, width, border, maximum_height)
   end
   local main_height = math.max(1, math.min(desired, viewport.height - border))
   local config = opts.details or {}

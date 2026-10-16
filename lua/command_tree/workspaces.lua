@@ -138,12 +138,13 @@ function Manager:configure(overrides, reserved)
   if reserved.global then reserved = reserved.global end
   -- Accept either { ['?']=true } or the session options.keys name -> key form.
   for key, value in pairs(reserved) do
-    local named = ({ close = true, detail = true, details_down = true, details_up = true, execute = true, search = true, workspaces = true,
+    local named = ({ close = true, detail = true, details_down = true, details_up = true, page_down = true, page_up = true, execute = true, search = true, workspaces = true,
       recent = true, favorites = true, favorite = true, words = true, inspect = true })[key]
     if named and type(value) == "string" then
       -- Enter is the ordinary accept action of each workspace. The session's
       -- tree accept key must not prohibit its built-in local Enter binding.
-      if key ~= "execute" or key_token(value) ~= "<CR>" then selected[key_token(value)] = true end
+      if key == 'page_down' or key == 'page_up' then selected[key_token(value)] = key
+      elseif key ~= "execute" or key_token(value) ~= "<CR>" then selected[key_token(value)] = true end
       if key == "close" and value ~= "\\" then selected["\\"] = nil end
       if key == "detail" and value ~= "?" then selected["?"] = nil end
     else
@@ -591,6 +592,15 @@ function Manager:handle(session, key, opts)
   if frame.data.input_active and frame.definition.handle then
     local ok, handled = invoke(frame, "handle", session, key, opts or {})
     if not ok or handled == true then return true end
+  end
+  if id == nil then
+    local keys = opts and opts.keys or {}
+    local control = key == keys.page_down and 'page_down' or key == keys.page_up and 'page_up'
+    if control then
+      for _, action_id in ipairs(vim.fn.sort(vim.tbl_keys(frame.definition.actions))) do
+        if frame.definition.actions[action_id].control == control then id = action_id; break end
+      end
+    end
   end
   if id then return self:action(session, id, opts) end
   if id == false or self.bases[frame.id].bindings[key] ~= nil then return false end

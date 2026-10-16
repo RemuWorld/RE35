@@ -138,22 +138,35 @@ local function report(view, placement, reason)
   end
 end
 
-function M.prepare(V, view, data, opts, source, groups)
+local function without_help(data)
+  local prepared = vim.tbl_extend('force', {}, data)
+  prepared.help, prepared.hints, prepared._panel_scroll_hint = nil, nil, nil
+  if data._panel_entries then
+    prepared._panel_entries = {}
+    for _, entry in ipairs(data._panel_entries) do
+      if not entry.hints then prepared._panel_entries[#prepared._panel_entries + 1] = entry end
+    end
+  end
+  return prepared
+end
+
+-- The same pure placement decision is used for drawing and fresh admission.
+-- Planning never allocates or closes a view, even if a previous guide exists.
+function M.plan(V, data, opts, source, groups)
   local fixed, model = opts._fixed_panel, opts.presentation
   local density = model and model.layout.density or opts.density or 'full'
   local help = model and model.information.help or not model and density == 'full'
   if not fixed or density ~= 'full' or not help
     or type(source.help) ~= 'string' and type(source.hints) ~= 'table' then
-    remove(V, view)
-    report(view, help and (source.help or source.hints) and 'below' or 'hidden')
-    return data
+    return data, { placement = help and (source.help or source.hints) and 'below' or 'hidden' }
+  end
+  if opts._guide_fallback then
+    return data, { placement = 'below', reason = 'Shortcut panel failed during the current draw; help remains below' }
   end
   local scroll = data._panel_scroll_hint or opts._details_hint
   local rows, marks, width = hint_rows(V, source, scroll, groups)
   if not rows then
-    remove(V, view)
-    report(view, 'below')
-    return data
+    return data, { placement = 'below' }
   end
   local viewport, border = fixed.viewport, fixed.border
   local col = fixed.guide_col or fixed.col + fixed.width + border + 1
@@ -164,23 +177,31 @@ function M.prepare(V, view, data, opts, source, groups)
   -- Keep complete controls: labels may add rows, while an impossible chord or
   -- viewport returns every original group to the existing below-panel path.
   if col < viewport.left or col + width + border > right or row + #rows + border > bottom then
-    remove(V, view)
-    report(view, 'below', 'Complete shortcut groups do not fit beside the command panel')
-    return data
+    return data, { placement = 'below', reason = 'Complete shortcut groups do not fit beside the command panel' }
   end
-  local guide = view.guide or {}
-  view.guide = guide
   local config = { relative = 'editor', row = row, col = col, width = width, height = #rows,
     border = border == 0 and 'none' or model and model.decoration.border or 'rounded', zindex = opts.zindex or 80 }
   if border > 0 then config.title, config.title_pos = ' Keys ', 'left' end
+  return without_help(data), { placement = 'right', rows = rows, marks = marks, config = config }
+end
+
+function M.prepare(V, view, data, opts, source, groups)
+  local prepared, plan = M.plan(V, data, opts, source, groups)
+  if plan.placement ~= 'right' then
+    remove(V, view)
+    report(view, plan.placement, plan.reason)
+    return prepared, opts
+  end
+  local guide = view.guide or {}
+  view.guide = guide
   local ok, reason = pcall(function()
-    V.window(guide, rows, config)
+    V.window(guide, plan.rows, plan.config)
     if groups then
       vim.wo[guide.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
         .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal
     end
     vim.api.nvim_buf_clear_namespace(guide.buf, ns, 0, -1)
-    for _, mark in ipairs(marks) do
+    for _, mark in ipairs(plan.marks) do
       if mark[3] > mark[2] then
         vim.api.nvim_buf_set_extmark(guide.buf, ns, mark[1], mark[2], { end_col = mark[3], hl_group = mark[4] })
       end
@@ -192,18 +213,13 @@ function M.prepare(V, view, data, opts, source, groups)
     if view.panel_report then
       view.panel_report.guide_error = tostring(reason)
     end
-    return data
+    -- Retain the actual fallback in the cached view options. A later fresh
+    -- admission may not assume help was extracted into a failed guide. The
+    -- next normal redraw plans again from its newly supplied source options.
+    return data, vim.tbl_extend('force', {}, opts, { _guide_fallback = true })
   end
   report(view, 'right')
-  local prepared = vim.tbl_extend('force', {}, data)
-  prepared.help, prepared.hints, prepared._panel_scroll_hint = nil, nil, nil
-  if data._panel_entries then
-    prepared._panel_entries = {}
-    for _, entry in ipairs(data._panel_entries) do
-      if not entry.hints then prepared._panel_entries[#prepared._panel_entries + 1] = entry end
-    end
-  end
-  return prepared
+  return prepared, opts
 end
 
 return M

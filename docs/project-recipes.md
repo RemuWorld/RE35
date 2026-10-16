@@ -78,15 +78,19 @@ the hidden internal commands.
 When modified loaded project files exist, choose existing saved files, explicitly
 save selected files from the original project, or cancel. No file is implicitly
 selected or saved. The full selected set is checked before the first write. A
-partial write failure retains the names already saved and starts no task. Native
+file is checked again immediately before its write, including changes made by
+earlier write hooks. Unselected buffers may change. A partial write failure
+retains the names already saved and starts no task. Native
 write hooks and readonly protection retain their normal behavior. Nested project
-files are excluded. Clean launch and retry retain the same target, declaration,
-source, profile and current-window checks without an extra choice screen.
+files are excluded. Run saved files leaves unsaved edits untouched, even if they
+change during the choice. Source disk identity, target, referenced execution
+declarations and the current source window are still checked.
 
 After launch validation, a recipe runs one process step at a time. Successful
 exit starts the next step. Failure, cancellation, timeout or invalidated original
-inputs, project identity or Settings stop later steps. Changing only the current
-Project selection does not retarget the running recipe. The working directory
+source disk identity, project or referenced execution declarations stop later
+steps. Unrelated buffer edits, appearance, aliases and unreferenced tools do not
+stop it. Changing the current Project selection does not retarget it. The working directory
 is checked before each launch, so
 Configure may create a later step's directory. Cancellation stays pending until
 the current execution scope completes. The default confirms only the direct
@@ -95,6 +99,11 @@ can include ordinary descendants through a Windows Job or Linux session group;
 intentional detached daemons and services are excluded. Missing configured
 helpers refuse execution rather than falling back. This is host configuration,
 not a new executable dependency for the ordinary plugin installation.
+
+Saved-input execution is not an immutable filesystem snapshot. RE35 checks the
+declared source and execution plan; it does not discover or freeze every file a
+compiler may read. A completed final child reports its actual outcome without
+retroactively failing because settings changed afterward.
 
 Project shows the latest recipe run for its selected project, root and recipe
 in that source window. It displays observed stage statuses, not inferred build
@@ -109,8 +118,9 @@ owning Task. Progress refresh stops while Project is covered or closed.
 Results retains the originating step for each location. A rerun from another
 header or project keeps the original source, root, configuration, target and
 arguments. If the project identity, declaration or original target no longer
-validates, retry is refused. Edits to the same source are rechecked before retry;
-changes during a required save review invalidate it. The original task is never
+validates, retry is refused. Source repairs made before retry are supported;
+disk changes during its save decision require a fresh review. Selecting files
+to save binds consent to their reviewed buffer revisions. The original task is never
 redirected to your later selection. Presets can
 store logical configuration/target choices, not live executions or machine roots.
 

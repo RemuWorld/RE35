@@ -130,7 +130,7 @@ local function completion(self, state, command, ctx, done, origin)
       self.drafts:forget(command.id, ctx.buf)
       if origin.input then origin.input.succeeded = true end
     end
-    if self.active == state then
+    if self:is_attached(state, origin.attachment) then
       if ok and origin.input and origin.parent_mode == 'workspace' and state.input == origin.input
         and origin.navigation == (state.navigation or 0) then
         state.input = nil
@@ -157,7 +157,7 @@ local function completion(self, state, command, ctx, done, origin)
     elseif not ok and detail and failure_message(detail) ~= 'Cancelled' then
       vim.notify((command.name or command.id) .. ': ' .. failure_message(detail), vim.log.levels.ERROR, { title = 'Command Environment' })
     end
-    if ok and self.active == state and K.valid(state.ctx) then
+    if ok and self:is_attached(state, origin.attachment) and K.valid(state.ctx) then
       local tick = vim.api.nvim_buf_get_changedtick(state.ctx.buf)
       if state.ctx.changedtick ~= tick then state.ctx.selection = nil end
       state.ctx.changedtick, state.ctx.cursor = tick, vim.api.nvim_win_get_cursor(state.ctx.win)
@@ -167,7 +167,7 @@ local function completion(self, state, command, ctx, done, origin)
 end
 
 local function execute(self, state, command, args, ctx, done, process_target, execution_scope, caller_id)
-  local origin = { navigation = state.navigation or 0, mode = state.mode, input = state.input,
+  local origin = { navigation = state.navigation or 0, mode = state.mode, input = state.input, attachment = state.input_attachment,
     parent_mode = state.frames[#state.frames] and state.frames[#state.frames].mode }
   -- Transfer completion from the form to its execution before closing any UI.
   if origin.input and origin.input.command.id == caller_id then origin.input.done = nil end
@@ -180,11 +180,11 @@ local function execute(self, state, command, args, ctx, done, process_target, ex
   local accepted, detail, operation = self.executor:execute(command.id, args, ctx, complete, {
     with_submission = execution_scope and execution_scope(command), process_target = process_target,
     select = function(items, options, callback)
-      if self.active ~= state then callback(nil); return end
+      if not self:is_attached(state, origin.attachment) then callback(nil); return end
       return self:request(items, options, callback, ctx)
     end,
     input = function(options, callback)
-      if self.active ~= state then callback(nil); return end
+      if not self:is_attached(state, origin.attachment) then callback(nil); return end
       return self:request_input(options, callback, ctx)
     end,
   })

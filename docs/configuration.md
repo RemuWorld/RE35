@@ -35,6 +35,11 @@ require('re35').setup({
 Single Up/Down steps wrap at the ends of selectable lists. Set `wrap = false`
 to clamp instead. Page jumps, text cursors, input history and scrollable output
 do not wrap. These are local host options, separate from portable profiles.
+`PageDown` / `PageUp` move by the current visible page capacity in selection
+lists, including theme choices and filtered pickers, across all three densities.
+Set `keys.page_down` / `keys.page_up` to remap them. Text-editing `Ctrl-d/u`
+keeps its existing meaning. Moving a command-search cursor with Left/Right or
+Home/End keeps the selected command; a changed ordered result list resets it.
 
 The main panel keeps its width, height and anchor while selection, description
 or error content changes. Changing view/scene or resizing the viewport can
@@ -73,8 +78,9 @@ for their facts.
 
 History reserves a border inside its source window and shows that buffer in an
 inset native view. Number/sign columns, folds and text stay inside the frame in
-all densities. Leaving or suspending History removes that view and returns to
-the unchanged original editor window; it does not add whitespace to the file.
+all densities. Leaving History or covering it with another workspace removes
+that view and returns to the unchanged original editor window; it does not add
+whitespace to the file.
 Sources smaller than three rows or columns cannot fit this frame; History
 reports the limitation instead of placing a border over the source text.
 
@@ -111,6 +117,19 @@ theme and reports the failure. If saving fails, the confirmed theme remains
 applied for the session and the warning stays inspectable. Theme state is
 host-local and is not included in portable profile or UI exports.
 
+The builtin Select theme picker shows the pending Light/Dark appearance,
+automatic-preview state and confirmation scope above the theme list. `Ctrl-b`
+switches Light/Dark; `Ctrl-t` toggles automatic preview without leaving the list.
+These controls are available while not filtering; `Esc` first leaves the filter.
+Preview starts enabled each time the picker opens. Turning it off restores the
+original theme and appearance; selecting another name then has no editor effect
+until `Enter` confirms it. Confirmation applies and saves that exact theme and
+appearance (or reports why the scheme cannot retain the requested appearance).
+`Esc` cancels both drafts and leaves the previously saved choice unchanged.
+Changing `:set background=light` or `:set background=dark` outside this picker
+affects the editor immediately but does not rewrite saved startup state. Open
+Select theme and confirm when you want to save the current appearance.
+
 A supplied `integrations.theme` adapter continues to own its commit, storage
 and startup. RE35 does not automatically call a custom adapter's `restore()`.
 Remove a custom persistence wrapper only when you intend to adopt the builtin
@@ -124,7 +143,24 @@ Settings > Getting started (`\sg`) explains controls and storage scope;
 is also available. Inspection installs no plugins, executables or servers.
 The first manual entry in each editor session offers a brief guide hint;
 `guidance.first_run = false` disables that hint. Editor in the workspace
-selector closes RE35 and returns to the original native editing window.
+selector suspends command navigation and returns to the native editing window.
+
+Leave an active workspace before choosing Editor; RE35 keeps its Settings drafts
+and resources intact if suspension is refused. The next plain `\` entry resumes
+the retained navigation with the current buffer and cursor. Forms and reviews
+are rebuilt by selecting their command again; nonsecret drafts remain available,
+secrets and Apply confirmations require new input. Native Normal/Insert/Visual
+modes remain managed by Neovim. An explicit search, command or workspace request
+starts a fresh session instead of resuming the old destination.
+
+If Editor was selected from the workspace selector, resuming returns to that
+selector; press Esc to return to the preceding command tree.
+
+`require('re35').suspend()` and `require('re35').resume()` also expose the
+transitions. `close()` disposes visible or suspended sessions without cancelling
+submitted background tasks. If final resource cleanup fails, it returns `false`
+with a reason; `state().cleanup_pending` and `cleanup_error` retain the diagnostic
+until cleanup can be retried. No live form or input hook is retained for that retry.
 
 ## Setup and saved settings
 
@@ -169,18 +205,36 @@ host activation fails, Saved / Reload required distinguishes the disk state
 from the still-active previous environment. The status screen reports the
 storage owner; a theme preview is independent of a Settings draft.
 
-## Updating from 0.1.0 and checking 0.2.0
+## Updating to 0.3.0
 
 Keep a backup of your existing profile and configuration. Update RE35 without
 deleting its state directory or replacing the saved profile. Version 1 profiles
 and existing storage paths are retained. Check the loaded version and source as
 described in [installation](install.md#check-the-loaded-source).
 
-For a focused first check:
+After updating, check these flows in your normal configuration:
 
-- Confirm your custom command paths, labels, favorites, slots, workspace bindings
-  and appearance preferences are still present. Setup alone should not rewrite
-  the saved profile; deliberate Settings Apply is a separate write.
+- Confirm your existing command paths, aliases, labels, favorites, quick slots,
+  workspace bindings and presentation presets still work. Setup alone should
+  not rewrite the saved profile; deliberate Settings Apply is a separate write.
+- Find an unavailable command through the tree or command search. Open Details
+  (`Ctrl-h`) and inspect its reason. Correct the stated requirement through its
+  offered Settings route or your host configuration, return and supply its
+  required input, then explicitly execute it. Returning from Settings must not
+  run the old command. For a concrete route, follow
+  [unavailable backend recovery](file-search.md#recover-an-unavailable-backend).
+- In a test project with two configurations and targets, run a recipe as
+  Debug/A and let a source error fail it. Change the current Project selection
+  to Release/B, open the failed Task's source results and repair the source.
+  Return to that Task and open its original-choice review (`v`): it should show
+  Debug/A. Explicitly run it, making any required file-save choice. The new Task
+  should use Debug/A while Project remains Release/B. See
+  [recipe recovery](recovery-workflow.md) for the controls and save choices.
+- Start a sufficiently long task, leave its active workspace and select Editor
+  in the workspace selector. Edit an unrelated note, then press plain `\` to
+  resume RE35. It should return to the selector; Esc returns to the preceding
+  tree. Inspect the original Task: the handoff should neither cancel it nor
+  launch another copy, and the note should not have been implicitly saved.
 - Navigate within one scene and density, show/hide descriptions and errors, and
   scroll details. The main panel should keep its footprint. Resize the terminal:
   panels should fit and reanchor to the new viewport, preserving input and
@@ -194,6 +248,16 @@ For a focused first check:
   setup call with the builtin defaults. Confirm a theme, exit and restart Neovim;
   it should return without the custom workaround. Previewing and cancelling a
   different theme should not replace the confirmed choice.
+- In Select theme, choose Light/Dark with `Ctrl-b` and turn automatic preview
+  off with `Ctrl-t`. Browse without changing the editor, cancel to restore the
+  original pair, then reopen and confirm the exact theme/appearance. Restart to
+  check the saved pair.
+- Test `PageUp` / `PageDown` in long selection lists, including Select theme
+  before and during filtering. Jumps should follow the visible page capacity
+  and stop at the ends; single Up/Down steps should retain your wrap setting.
+- In command search, select a later result and move the query caret with
+  Left/Right and Home/End. The result should stay selected until the ordered
+  result list changes. Repeat in Full, Compact and Minimal.
 
 Use your normal editing workflow as well as these focused cases. Report the
 loaded version, relevant setup options, steps and expected/observed behavior.

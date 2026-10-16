@@ -9,7 +9,7 @@ workflow semantics. Hosts connect those definitions to their UI, editor services
 and tools. Portable profiles carry user declarations; supported operations and
 live task history depend on the host.
 
-**Version 0.2.3.** Neovim is the primary host.
+**Version 0.3.0.** Neovim is the primary host.
 The optional VS Code desktop development host supports a defined subset of
 document and project workflows. See [command coverage](docs/command-coverage.md)
 and [compatibility](docs/compatibility.md) for supported scope and limitations.
@@ -28,9 +28,9 @@ Press `\` to open RE35; ordinary Normal-mode keys remain available before entry.
 - Edit portable profiles, custom commands and workspace bindings.
 - Create, edit and share appearance presets, including Full, Compact and Minimal views.
 
-0.2.3 keeps History text inside its workspace frame, sizes dense input screens
-for their content, stabilizes shortcut-guide width and separates temporary save
-confirmations from navigation titles.
+0.3.0 improves editor return/resume and recipe recovery, unifies layout
+calculation, and adds Light/Dark and preview controls, list paging and stable
+search selection. Existing profiles and shared contract versions are retained.
 
 ## Install
 
@@ -39,7 +39,7 @@ With lazy.nvim, pin the version you want to use:
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.2.3",
+  tag = "v0.3.0",
   config = function()
     require("re35").setup()
   end,
@@ -65,6 +65,7 @@ After opening RE35 with `\`:
 | `s` | Open Settings |
 | `s g` / `s v` | Getting started / integration diagnostics |
 | `↑` / `↓` | Select a tree item |
+| PageUp / PageDown | Move one page in a selectable list |
 | Enter / `→` | Enter the selected item |
 | Esc / Backspace / `←` | Go back |
 | `?` | Change view density |
@@ -73,9 +74,12 @@ Text fields retain their editing keys. Tab offers completion and F1 changes
 density. Ctrl-h opens a command's details; `s` there shows status and `r`
 rechecks requirements.
 Ctrl-h also inspects preview errors without losing an input. Shift-PageUp and
-Shift-PageDown scroll the independent details panel. Select Editor in Workspaces
-to return to native editing. See [configuration](docs/configuration.md) for theme
-persistence, list wrapping and panel options available since 0.2.0.
+Shift-PageDown scroll the independent details panel. Leave any active workspace,
+then select Editor to return to native editing; the next plain `\` entry resumes
+navigation. See [configuration](docs/configuration.md) for theme
+persistence, theme controls, list navigation and panel options. The
+[update checks](docs/configuration.md#updating-to-030) describe useful
+flows to try with your own configuration.
 
 ## Other integrations
 

@@ -6,6 +6,14 @@ rendering, persistence, source identity and execution. Neovim uses them in proce
 the optional VS Code host uses the native transport. The portable Engine is a
 bounded request model rather than the complete Neovim Session.
 
+`core.command_descriptor` shares argument structure checks between native
+registration and Protocol 1. Neovim's Index also receives a discovery schema;
+callbacks and omitted values are identified by `host_fields`, without secret
+defaults or choices. Large optional values can be omitted to keep the Index
+bounded without restricting native commands. These snapshots do not grant
+execution authority or replace host validation. Protocol 1 retains its own
+field allowlists and quotas; they are not limits on Neovim declarations.
+
 Shared profile declarations can describe logical projects, recipes, choices and
 presentation preferences. Executable paths, project mappings, live editor
 objects, authorization receipts and Task history belong to the host. Retaining

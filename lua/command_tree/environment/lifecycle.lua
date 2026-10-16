@@ -18,6 +18,7 @@ function Lifecycle:is_current(token) return token ~= nil and token == self.ident
 function Lifecycle:prepare(opts) return Builder.prepare(opts) end
 function Lifecycle:admit()
   if self.changing then return false, 'Environment lifecycle is already changing: ' .. self.changing end
+  if self.environment and self.environment.session.transitioning then return false, 'Session lifecycle is already changing' end
   return true
 end
 function Lifecycle:assert_mutable()
@@ -27,6 +28,7 @@ end
 
 function Lifecycle:with_lock(label, callback)
   if self.changing then return false, 'Environment lifecycle is already changing: ' .. self.changing end
+  if self.environment and self.environment.session.transitioning then return false, 'Session lifecycle is already changing' end
   local state = self.environment and self.environment.session.active
   if state and state.workspace_mutating then return false, 'Workspace lifecycle is already changing; retry after its current hook completes' end
   self.changing = label
@@ -47,7 +49,8 @@ function Lifecycle:activate(candidate)
   local old_registry, old_usage = executor.registry, executor.usage
   local ok, err = xpcall(function()
     if previous then
-      previous.session:close()
+      local closed, why = previous.session:close()
+      if closed == false then error('Previous session cleanup is incomplete: ' .. tostring(why), 0) end
       -- Transfer reviewed scalar Project state only; UI ownership never crosses
       -- environments. Empty recipe profiles retain their lazy service.
       if rawget(candidate.project_recipes, 'projects') and rawget(previous.project_recipes, 'projects') then
@@ -87,7 +90,11 @@ end
 
 function Lifecycle:disable()
   local safe, result, err = self:with_lock('disable', function()
-    if self.environment then self.environment.session:close(); dispose(self.environment) end
+    if self.environment then
+      local closed, why = self.environment.session:close()
+      if closed == false then return false, 'Session cleanup is incomplete: ' .. tostring(why) end
+      dispose(self.environment)
+    end
     self.identity = nil
     Events.clear()
     return true

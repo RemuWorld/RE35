@@ -210,8 +210,8 @@ H.eq({ 'Debug/A', 'saved input' }, vim.fn.readfile(folder .. '/observed.txt'))
 H.eq('Release', CE.project_context(session.active.ctx).configuration)
 H.eq('B', CE.project_context(session.active.ctx).target, 'retained retry preserves current Project choices')
 
--- Fast access retains the normal dirty-file decision and the snapshot guard
--- between that decision and execution; it grants no automatic write consent.
+-- Fast access retains the explicit save decision. Run saved uses disk inputs,
+-- so unsaved text changes grant neither write consent nor a new blocker.
 CE.close(); vim.api.nvim_buf_set_lines(buf, 0, -1, true, { 'selected unsaved input' })
 open(); count = #CE.operations(); keys('rr')
 H.eq('input', session.active.mode, 'dirty rr retains a saved-file decision')
@@ -230,10 +230,15 @@ H.eq({ 'saved input' }, vim.fn.readfile(source), 'Run saved files retains the mo
 open(); count = #CE.operations(); keys('rr')
 H.eq('input', session.active.mode)
 vim.api.nvim_buf_set_lines(buf, 0, -1, true, { 'changed during selected review' })
+previous = latest()
 keys('<Down><CR>')
-H.eq(count, #CE.operations(), 'document changes during dirty review reject selected-recipe execution')
-H.ok(session.active.message:find('changed while reviewing', 1, true))
+local edited_saved = completed(previous)
+H.eq('Release', edited_saved.detail.configuration); H.eq('B', edited_saved.detail.target)
+H.eq({ 'Release/B', 'saved input' }, vim.fn.readfile(folder .. '/observed.txt'),
+  'Run saved still consumes the reviewed disk source after an unsaved edit')
+H.eq({ 'changed during selected review' }, vim.api.nvim_buf_get_lines(buf, 0, -1, true))
 H.eq({ 'saved input' }, vim.fn.readfile(source))
+count = #CE.operations()
 
 -- Existing user commands keep rr. The semantic ID can still be bound through
 -- a later portable profile layout, without replacing the user's command.

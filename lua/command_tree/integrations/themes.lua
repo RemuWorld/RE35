@@ -49,8 +49,16 @@ function M.new(options)
   end
   local function change(name, background)
     local restore = snapshot()
-    if background then vim.o.background = background end
-    local ok, failure = pcall(apply, name)
+    local ok, failure = pcall(function()
+      if background then vim.o.background = background end
+      apply(name)
+      -- A colorscheme may select its own appearance while loading. The picker
+      -- must either apply the explicitly chosen value or report the mismatch,
+      -- never save a different value under a Light/Dark confirmation.
+      if background and vim.o.background ~= background then vim.o.background = background end
+      assert(not background or vim.o.background == background,
+        'Colorscheme ' .. tostring(name) .. ' does not retain the requested ' .. tostring(background) .. ' appearance')
+    end)
     if not ok then
       local restored, restore_error = pcall(restore)
       if not restored then failure = tostring(failure) .. "; restoring the previous theme also failed: " .. tostring(restore_error) end
@@ -58,17 +66,59 @@ function M.new(options)
     end
     return restore
   end
+  local function appearance(args)
+    if args.background ~= nil and args.background ~= 'light' and args.background ~= 'dark' then
+      return false, 'Theme appearance must be light or dark'
+    end
+    if args.preview ~= nil and type(args.preview) ~= 'boolean' then
+      return false, 'Automatic theme preview must be a boolean'
+    end
+    return true
+  end
+  -- These are native picker controls rather than additional required form
+  -- steps. The Session owns their draft and preview cleanup; merely inspecting
+  -- this adapter or changing :set background never writes startup state.
+  adapter.input_ui = {
+    init = function(_, args)
+      local valid, failure = appearance(args)
+      assert(valid, failure)
+      return { background = args.background or vim.o.background, preview = args.preview ~= false }
+    end,
+    handle = function(_, args, key)
+      if key == '<C-b>' then return { background = args.background == 'light' and 'dark' or 'light' } end
+      if key == '<C-t>' then return { preview = args.preview == false } end
+    end,
+    status = function(_, args, selected)
+      local background = args.background or vim.o.background
+      local label = background == 'light' and 'Light' or 'Dark'
+      local preview = args.preview == false and 'Off' or 'On'
+      return { label = label .. ' · Preview ' .. preview .. ' · ' .. (enabled and 'Save for startup' or 'Session only'),
+        help = 'Ctrl-b Light/Dark  ·  Ctrl-t Auto preview',
+        description = 'Enter confirms ' .. tostring(selected or args.theme or 'the selected theme') .. ' · ' .. label
+          .. (enabled and ' and saves it for startup.' or ' for this session only.')
+          .. ' Preview is temporary; Esc restores the original theme and appearance.'
+          .. (enabled and ' Changes made with :set background are saved only when a theme is confirmed here.'
+            or ' Theme persistence is disabled; native background changes remain session-only.') }
+    end,
+  }
   function adapter.preview(_, args)
-    if not args.theme then return end
-    local restore, failure = change(args.theme)
+    local valid, failure = appearance(args)
+    assert(valid, failure)
+    if not args.theme or args.preview == false then return end
+    local restore
+    restore, failure = change(args.theme, args.background)
     if not restore then error(failure) end
     return restore
   end
   function adapter.commit(_, args)
-    local restore, failure = change(args.theme)
+    local valid, failure = appearance(args)
+    if not valid then return false, failure end
+    local restore
+    restore, failure = change(args.theme, args.background)
     if not restore then return false, failure end
-    status = { enabled = enabled, theme = args.theme, state = 'session_only', scope = 'session', path = enabled and path or nil }
-    local result = { theme = args.theme }
+    status = { enabled = enabled, theme = args.theme, background = vim.o.background,
+      state = 'session_only', scope = 'session', path = enabled and path or nil }
+    local result = { theme = args.theme, background = vim.o.background }
     if enabled then
       local saved, save_error = State.write(path, args.theme, vim.o.background)
       if saved then status.state, status.scope = 'saved', 'startup'
@@ -90,7 +140,8 @@ function M.new(options)
     if data then
       local changed, apply_error = change(data.theme, data.background)
       if changed then
-        status = { enabled = true, state = 'restored', scope = 'startup', path = path, theme = data.theme }
+        status = { enabled = true, state = 'restored', scope = 'startup', path = path, theme = data.theme,
+          background = data.background }
         return true, adapter.persistence_status()
       end
       failure = apply_error
