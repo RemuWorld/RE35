@@ -41,8 +41,8 @@ function M.highlights()
   local float = vim.api.nvim_get_hl(0, { name = "NormalFloat", link = false })
   local normal = vim.api.nvim_get_hl(0, { name = "Normal", link = false })
   local comment = vim.api.nvim_get_hl(0, { name = "Comment", link = false })
-  vim.api.nvim_set_hl(0, "CommandTreeBorder", { fg = border.fg or comment.fg or normal.fg,
-    bg = float.bg or normal.bg, default = true })
+  derived_default("CommandTreeBorder", { fg = border.fg or comment.fg or normal.fg,
+    bg = float.bg or normal.bg })
 end
 
 function M.width(text) return vim.fn.strdisplaywidth(text) end
@@ -219,6 +219,15 @@ local function draw(view, data, opts)
         reason = 'Concurrent presentation highlight slots exhausted; host theme roles are used' }
     end
   end
+  -- Companion panels use the same decoration role as the main surface. Keep
+  -- default borders distinct from shortcut text, while retaining authored
+  -- preset roles and the host's explicit per-window accent.
+  if opts._display.source == 'preset' then groups.border = groups.accent
+  elseif opts.accent then
+    groups.border = 'CommandTreeAccent' .. tostring(opts.accent):gsub('[^%w]', '')
+    local background = vim.api.nvim_get_hl(0, { name = 'NormalFloat', link = false }).bg
+    vim.api.nvim_set_hl(0, groups.border, { fg = opts.accent, bg = background })
+  else groups.border = 'CommandTreeBorder' end
   data, opts = require('command_tree.view.guide').prepare(M, view, data, opts, source_data, groups)
   return require('command_tree.view.presentation').draw(M, view, data, opts, groups)
 end

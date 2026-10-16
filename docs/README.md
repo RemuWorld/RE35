@@ -1,6 +1,6 @@
 # RE35 documentation
 
-These documents describe RE35 0.3.0. Start with installation and configuration.
+These documents describe RE35 0.3.1. Start with installation and configuration.
 See [command coverage](command-coverage.md) and
 [compatibility](compatibility.md) for host scope and known limitations.
 

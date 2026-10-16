@@ -77,7 +77,7 @@ local function items(frame)
     row('storage', 'Understand saved state', 'Settings edits are Drafts until Apply. Saved changes restore at startup; memory-only changes last for this session.'),
     row('integrations', 'Integration diagnostics', 'Check which features are built in and which need your configured plugin, executable or language server.'),
     row('persistence', 'Storage status', 'Inspect the actual profile, theme and history storage state; previewing a theme does not save it.'),
-    row('editor', 'Return to editor', 'Editor is a navigation destination. Neovim continues to own Normal, Insert and terminal editing.'),
+    row('editor', 'Return to editor', 'Workspaces > Editor keeps navigation for the next entry. Close ends navigation and starts fresh next time. Neither action cancels submitted Tasks; Neovim owns editing.'),
   }
 end
 function M.definition()

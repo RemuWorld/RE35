@@ -150,14 +150,19 @@ V.highlights()
 for _, palette in ipairs({ { 0x556677, 0x667788, 0x778899, 0x8899AA }, { 0x99AABB, 0xAABBCC, 0xBBCCDD, 0xCCDDEE } }) do
   vim.api.nvim_set_hl(0, 'NormalFloat', { fg = palette[1], bg = palette[2] })
   vim.api.nvim_set_hl(0, 'PmenuSel', { fg = palette[3], bg = palette[4] })
+  vim.api.nvim_set_hl(0, 'FloatBorder', { fg = palette[3], bg = 0x010101, reverse = true })
   V.highlights()
   local branch = vim.api.nvim_get_hl(0, { name = 'CommandTreeGroup', link = false })
   local selected = vim.api.nvim_get_hl(0, { name = 'CommandTreeSelectedGroup', link = false })
+  local border = vim.api.nvim_get_hl(0, { name = 'CommandTreeBorder', link = false })
   H.eq(palette[1], branch.fg, 'Derived branch foreground follows ColorScheme palette')
   H.eq(palette[2], branch.bg, 'Derived branch background follows ColorScheme palette')
   H.eq(palette[3], selected.fg, 'Derived selected branch foreground follows ColorScheme palette')
   H.eq(palette[4], selected.bg, 'Derived selected branch background follows ColorScheme palette')
   H.eq(true, branch.bold, 'Theme refresh keeps default branch emphasis')
+  H.eq(palette[3], border.fg, 'Owned border follows a palette-only foreground change')
+  H.eq(palette[2], border.bg, 'Owned border follows the panel background without highlight clear')
+  H.ok(not border.reverse, 'A reversed theme separator cannot reverse the panel border')
 end
 local preset_view, inherited_colors = {}, { window = { density = 'full', width = 48, icons = false },
   presentation = { version = 1, selected = 'palette', presets = { palette = { extends = 'full', roles = {
@@ -183,12 +188,58 @@ V.draw(feedback, { path = '\\', items = {}, message = 'Secondary message', error
 has_fg(feedback, 'Primary failure', 0xD02020, 'Inline feedback prioritizes actual error text and severity')
 V.close(feedback)
 
+-- Main, Keys and Details share decoration colors on real floating windows.
+-- The legacy host accent and authored preset accents retain their precedence.
+vim.o.columns, vim.o.lines = 180, 48
+local function window_role(part, role)
+  for from, group in vim.wo[part.win].winhighlight:gmatch('([^:,]+):([^,]+)') do
+    if from == role then return group end
+  end
+end
+local function consistent_borders(view, fg, bg, label)
+  H.ok(view.guide and view.details, label .. ': actual Keys and Details panels exist')
+  local group = window_role(view, 'FloatBorder')
+  for _, part in ipairs({ view, view.guide, view.details }) do
+    H.eq(group, window_role(part, 'FloatBorder'), label .. ': each panel uses the same border role')
+    local attrs = vim.api.nvim_get_hl(0, { name = window_role(part, 'FloatBorder'), link = false })
+    H.eq(fg, attrs.fg, label .. ': border foreground is consistent')
+    H.eq(bg, attrs.bg, label .. ': border background is consistent')
+  end
+end
+local panel_data = { path = '\\', selected = 1,
+  items = { { key = 'a', name = 'Action' }, { key = 'g', name = 'Group', group = true } },
+  help = 'Esc Back  ·  Enter Run  ·  / Search', details = { description = 'Context stays below' } }
+local palette_view = {}
+local palette_options = P.options({ window = { layout = 'fixed', density = 'full', width = 48,
+  max_width = 72, max_height = 12, details = { enabled = true, max_height = 4 } } }, {}, 'tree')
+for _, palette in ipairs({ { 0x123456, 0x223344 }, { 0x654321, 0x334455 } }) do
+  vim.api.nvim_set_hl(0, 'NormalFloat', { fg = 0xEEEEEE, bg = palette[2] })
+  vim.api.nvim_set_hl(0, 'FloatBorder', { fg = palette[1], bg = 0x010101 })
+  V.highlights()
+  V.draw(palette_view, panel_data, palette_options)
+  consistent_borders(palette_view, palette[1], palette[2], 'Default after palette-only transition')
+end
+V.close(palette_view)
+local local_accent = vim.deepcopy(palette_options)
+local_accent.accent = '#C08020'
+V.draw(palette_view, panel_data, local_accent)
+consistent_borders(palette_view, 0xC08020, 0x334455, 'Explicit host window accent')
+V.close(palette_view)
+local preset_accent = P.options({ window = { layout = 'fixed', density = 'full', width = 48,
+  max_width = 72, max_height = 12, accent = '#C08020', details = { enabled = true, max_height = 4 } },
+  presentation = { version = 1, selected = 'decorated', presets = { decorated = {
+    extends = 'full', roles = { normal = { bg = '#102030' }, accent = { fg = '#AA55CC', bg = '#223344' } } } } } }, {}, 'tree')
+V.draw(palette_view, panel_data, preset_accent)
+consistent_borders(palette_view, 0xAA55CC, 0x223344, 'Authored preset accent takes precedence')
+V.close(palette_view)
+
 -- Host defaults must never overwrite explicit user choices on redraw/setup.
 vim.api.nvim_set_hl(0, 'CommandTreeKey', { fg = 0x123456, bold = true })
 vim.api.nvim_set_hl(0, 'CommandTreeGroup', { fg = 0x654321, bold = false, underline = true })
 vim.api.nvim_set_hl(0, 'CommandTreeError', { link = 'Special' })
+vim.api.nvim_set_hl(0, 'CommandTreeBorder', { fg = 0xABCDEF, bg = 0x010203, bold = true })
 local custom = {}
-for _, name in ipairs({ 'CommandTreeKey', 'CommandTreeGroup', 'CommandTreeError' }) do
+for _, name in ipairs({ 'CommandTreeKey', 'CommandTreeGroup', 'CommandTreeError', 'CommandTreeBorder' }) do
   custom[name] = vim.api.nvim_get_hl(0, { name = name, link = true })
 end
 V.highlights(); V.highlights()
@@ -199,4 +250,15 @@ H.ok(not vim.api.nvim_get_hl(0, { name = 'CommandTreeSelectedGroup', link = fals
   'Explicit plain branch style also remains plain while selected')
 H.eq(true, vim.api.nvim_get_hl(0, { name = 'CommandTreeSelectedGroup', link = false }).underline,
   'Explicit branch underline also survives selection')
+V.draw(palette_view, panel_data, palette_options)
+consistent_borders(palette_view, 0xABCDEF, 0x010203, 'Explicit border color and style override')
+H.eq(true, vim.api.nvim_get_hl(0, { name = 'CommandTreeBorder', link = false }).bold,
+  'Explicit border style is retained')
+V.close(palette_view)
+vim.api.nvim_set_hl(0, 'CommandTreeBorder', { link = 'Special' })
+vim.api.nvim_set_hl(0, 'NormalFloat', { fg = 0xEEEEEE, bg = 0x445566 })
+vim.api.nvim_set_hl(0, 'FloatBorder', { fg = 0x112233 })
+V.highlights()
+H.eq({ link = 'Special' }, vim.api.nvim_get_hl(0, { name = 'CommandTreeBorder', link = true }),
+  'Explicit border link survives a subsequent palette refresh')
 print('Rendered color roles and user overrides passed: ' .. H.checks .. ' checks')

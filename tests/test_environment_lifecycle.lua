@@ -35,6 +35,29 @@ local function options(extra)
     end } },
   }, extra or {})
 end
+local function conflicting_options(bindings)
+  return options({ commands = {
+    { id = 'fixture.original', path = 'xz', run = function() return true end },
+    { id = 'fixture.conflict', path = not bindings and 'xz' or nil, run = function() return true end },
+  }, bindings = bindings and { { path = 'xz', id = 'fixture.conflict' } } or {} })
+end
+local function explains_conflict(reason, origin)
+  local message = tostring(reason)
+  H.ok(message:find(origin, 1, true), 'Configuration conflict identifies its declaration')
+  H.ok(message:find('already bound: xz', 1, true), 'Configuration conflict identifies its path')
+  H.ok(message:find('existing: fixture.original; requested: fixture.conflict', 1, true),
+    'Configuration conflict identifies the existing and requested command IDs')
+  H.ok(message:find('Choose another path', 1, true) and message:find('replace = true', 1, true),
+    'Configuration conflict explains preservation and explicit replacement')
+end
+local first_conflict = H.raises(function() CE.setup(conflicting_options(false)) end, 'First setup rejects conflicting command placement')
+explains_conflict(first_conflict, 'commands[2]')
+H.eq(nil, CE.environment_token(), 'First setup conflict does not activate a partial environment')
+H.eq(false, CE.state().active, 'First setup conflict opens no command session')
+H.eq(nil, require('command_tree.entry').opts, 'First setup conflict installs no entry mappings')
+local first_binding = H.raises(function() CE.setup(conflicting_options(true)) end, 'First setup rejects a conflicting binding')
+explains_conflict(first_binding, 'bindings[1]')
+H.eq(nil, CE.environment_token(), 'Failed binding declaration does not activate candidate commands')
 CE.setup(options({ extensions = { extension('old') } }))
 local original_registry, executor, token = CE.registry(), session.executor, CE.environment_token()
 H.ok(token and CE.is_current_environment(token), 'Successful setup owns one opaque current token')
@@ -49,6 +72,16 @@ H.ok(CE.is_current_environment(token), 'Validation failure retains the original 
 H.eq(nil, cleanup.old, 'Validation failure does not dispose current extensions')
 CE.open({ interactive = false })
 local owned_session = session.active
+local replacement_conflict = H.raises(function() CE.setup(conflicting_options(true)) end,
+  'Conflicting replacement is rejected before closing the current session')
+explains_conflict(replacement_conflict, 'bindings[1]')
+H.eq(original_registry, CE.registry(), 'Conflicting replacement preserves the exact registry')
+H.ok(CE.is_current_environment(token), 'Conflicting replacement preserves the current environment token')
+H.eq(owned_session, session.active, 'Conflicting replacement preserves the current navigation session')
+H.eq(nil, CE.registry():get('fixture.original'), 'Conflicting candidate commands do not leak into the previous registry')
+H.eq(nil, CE.registry():get('fixture.conflict'), 'Conflicting custom command is not partly activated')
+H.eq(nil, cleanup.old, 'Conflicting replacement does not dispose current extension handlers')
+H.eq('pending', operation.status, 'Conflicting replacement does not cancel a running task')
 owned_session.workspace_mutating = true
 H.raises(function() CE.setup(options()) end, 'Setup rejects replacement while a Workspace hook owns its lifecycle')
 H.eq(owned_session, session.active, 'Rejected reentry leaves the current Session intact')

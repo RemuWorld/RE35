@@ -197,7 +197,7 @@ function M.prepare(V, view, data, opts, source, groups)
   local ok, reason = pcall(function()
     V.window(guide, plan.rows, plan.config)
     if groups then
-      vim.wo[guide.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
+      vim.wo[guide.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. (groups.border or groups.accent)
         .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal
     end
     vim.api.nvim_buf_clear_namespace(guide.buf, ns, 0, -1)

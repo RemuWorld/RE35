@@ -406,7 +406,7 @@ function M.draw(V, view, data, opts, groups)
     width = fixed.width, height = detail.visible,
     border = fixed.detail_border == 0 and 'none' or opts.presentation and opts.presentation.decoration.border or 'rounded',
     zindex = opts.zindex or 80 }
-  if groups then detail.winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
+  if groups then detail.winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. (groups.border or groups.accent)
     .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal end
   local ok, reason = pcall(render, V, detail)
   if not ok then

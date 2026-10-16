@@ -202,7 +202,9 @@ function M.attach(self)
       Driver.detach(self, state)
       self.active, self.suspended = nil, state
       state.running, state.suspended, state.visible = false, true, false
-      state.message = 'Returned from Editor; select the command again to review saved inputs'
+      -- Navigation resumes silently. If a command later restores a draft,
+      -- its form explains that specific restoration at the point of use.
+      state.message = nil
       settle()
       vim.api.nvim_set_current_win(state.ctx.win)
       return true, state

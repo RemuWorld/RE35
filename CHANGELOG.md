@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.3.1
+
+- Restore Full's contextual Keys panel in choice pickers, including selection,
+  paging and theme controls. Show controls that apply to the current filter state
+  and preserve custom adapter help when a side guide cannot represent it.
+- Resume navigation from Editor silently. Show a neutral input-restoration notice
+  only when reopening the command whose draft is restored.
+- Expose the existing Workspaces shortcut in tree guidance and explain Editor's
+  resumable return alongside Close's fresh navigation on the next entry.
+- Use a consistent border role for the main, Keys and Details panels. Refresh
+  RE35-owned border colors after palette changes while preserving user overrides.
+- Identify both commands and the setup entry responsible for a path conflict.
+  Keep strict candidate validation and preserve an existing working environment.
+
+The reported source-buffer background inconsistency during colorscheme preview
+remains under investigation; the border fix does not establish its cause.
+
 ## 0.3.0
 
 - Return to the native editor and resume command navigation with a fresh source

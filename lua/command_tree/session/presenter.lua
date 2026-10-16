@@ -9,6 +9,11 @@ local Feedback = require('command_tree.session.feedback')
 local has_children, guide_owns_key, path_label = Guide.has_children, Guide.owns_key, Guide.path_label
 local function copy_path(path) return vim.deepcopy(path or {}) end
 local M = {}
+local function picker_hint(data, key, label, group)
+  local hint = { key = Guide.hint_key(key), label = label, group = group }
+  data.hints[#data.hints + 1] = hint
+  data.help = data.help .. (data.help ~= '' and '  ·  ' or '') .. hint.key .. ' ' .. label
+end
 local function diagnostic_rows(record, width)
   local items = {}
   for _, line in ipairs(record.lines or {}) do
@@ -50,7 +55,7 @@ function M.attach(self)
     local data = { title = "Commands", path = self.options.open_key .. " " .. path_label(state.path),
       label = "Commands", items = {}, message = state.message, notice = Feedback.notice(state),
       page = state.page, diagnostic = Feedback.current(state),
-      help = "Esc Back  ·  " .. K.label(self.options.keys.search) .. " Search  ·  " .. K.label(self.options.keys.detail) .. " View  ·  " .. self.options.open_key .. " Close" }
+      help = "Esc Back  ·  " .. K.label(self.options.keys.search) .. " Search  ·  " .. K.label(self.options.keys.detail) .. " View  ·  " .. self.options.open_key .. " Close session" }
     if state.mode == "search" or state.mode == "words" then
       local words = state.mode == "words"
       data.title, data.label, data.query = words and "Paths" or "Search", words and "Word paths" or state.filter and (state.filter == "recent" and "Recent" or "Favorites") or "All commands", Text.display(state.query or "", state.query_cursor)
@@ -84,7 +89,12 @@ function M.attach(self)
         data.query_text, data.query_cursor = state.query or "", state.query_cursor
       end
       data.selected, data.help = state.selected, state.selector_filtering and "Enter Open  ·  Esc Finish filter"
-        or "Enter Open  ·  / Filter  ·  Esc Back  ·  " .. self.options.open_key .. " Close"
+        or "Enter Open  ·  / Filter  ·  Esc Back  ·  " .. self.options.open_key .. " Close session"
+      local selected_workspace = workspaces[state.selected]
+      if selected_workspace and selected_workspace.destination == 'editor' then
+        data.details = { description = 'Temporarily return to the native editor. Plain ' .. self.options.open_key
+          .. ' entry resumes navigation; Close session ends navigation so the next entry starts fresh. Submitted background tasks continue.' }
+      end
       data.empty = "No matching workspaces"
     elseif state.mode == "inspect" then
       local command = self.registry:get(state.inspected_id)
@@ -178,10 +188,29 @@ function M.attach(self)
         local shown = field.secret and string.rep("•", vim.fn.strchars(input.text or "")) or input.text or ""
         data.items = { { key = ">", name = Text.display(shown, input.cursor), editing_text = shown, editing_cursor = input.cursor } }
       end
-      data.help = input.choices and (field.kind == "multiselect" and "Space Toggle  ·  Enter Accept  ·  / Filter  ·  Esc Back" or "Enter Select  ·  / Filter  ·  F1 View  ·  Esc Back")
-        or ("Enter Next / Run  ·  Tab Complete  ·  ↑/↓ History  ·  Esc Back")
+      data.help = "Enter Next / Run  ·  Tab Complete  ·  ↑/↓ History  ·  Esc Back"
       if input.choices then
-        data.help = data.help .. '  ·  ' .. Guide.hint_pair(self.options.keys.page_up or '<PageUp>', self.options.keys.page_down or '<PageDown>') .. ' Page'
+        -- Built-in controls already know their keys. Keep their structured
+        -- identity instead of parsing rendered names such as PgUp/PgDn back
+        -- out of prose, and advertise only controls active in this filter state.
+        data.help, data.hints = '', {}
+        picker_hint(data, '<Up>/<Down>', 'Select', 'navigation')
+        picker_hint(data, Guide.hint_pair(self.options.keys.page_up or '<PageUp>', self.options.keys.page_down or '<PageDown>'), 'Page', 'navigation')
+        local accepting = 'Select'
+        if input.callback then accepting = 'Accept'
+        elseif input.command.review_policy == 'explicit_apply' and input.index == #input.command.arguments
+          and field.kind == 'boolean' and field.required then accepting = 'Apply / Cancel'
+        elseif input.editing_review or #input.command.arguments > 1 and input.index == #input.command.arguments then accepting = 'Review'
+        elseif input.index == #input.command.arguments then accepting = 'Confirm' end
+        picker_hint(data, '<CR>', accepting, 'actions')
+        local back = input.editing_review and 'Back to review' or input.filtering and 'Finish filter'
+          or (input.callback or input.index == 1) and 'Cancel' or 'Back'
+        picker_hint(data, '<Esc>', back, 'navigation')
+        if not input.filtering then
+          picker_hint(data, '/', 'Filter', 'actions')
+          if field.kind == 'multiselect' then picker_hint(data, '<Space>', 'Toggle', 'actions') end
+        end
+        picker_hint(data, '<F1>', 'View', 'information')
         local attachment = state.input_attachment
         local status = self:input_status()
         -- A native presentation hook may synchronously close, replace or
@@ -190,12 +219,25 @@ function M.attach(self)
           or not input.callback and self.registry:get(input.command.id) ~= input.command then return end
         if status then
           if status.label and status.label ~= '' then data.label = status.label .. ' · ' .. data.label end
-          if status.help and status.help ~= '' then data.help = data.help .. '  ·  ' .. status.help end
+          if status.help and status.help ~= '' then
+            local hints = Guide.help_hints(status.help)
+            if not input.filtering or not hints then
+              data.help = data.help .. '  ·  ' .. status.help
+              if hints then vim.list_extend(data.hints, hints)
+              else data.hints = nil end -- Unknown adapter prose keeps its below-panel fallback.
+            end
+          end
           if status.description and status.description ~= '' then data.details = { description = status.description } end
         end
       end
-      if not field.required and not input.callback then data.help = data.help .. "  ·  Ctrl-s Skip" end
-      if data.diagnostic then data.help = data.help .. '  ·  ' .. K.label(self.options.keys.inspect or '<C-h>') .. ' Inspect error' end
+      if not field.required and not input.callback then
+        if data.hints then picker_hint(data, '<C-s>', 'Skip', 'actions')
+        else data.help = data.help .. "  ·  Ctrl-s Skip" end
+      end
+      if data.diagnostic then
+        if data.hints then picker_hint(data, self.options.keys.inspect or '<C-h>', 'Inspect error', 'information')
+        else data.help = data.help .. '  ·  ' .. K.label(self.options.keys.inspect or '<C-h>') .. ' Inspect error' end
+      end
     else
       local node = state.mode == "keymaps" and Maps.node(state.keymap_root, state.path) or self.registry:node(state.path)
       if not node then state.message = "Path is no longer registered"; return end
@@ -274,15 +316,18 @@ function M.attach(self)
           end
         end
         if not state.tree_selection then state.tree_selected_entry = nil end
-        data.help = data.help .. "  ·  ↑/↓ Select  ·  " .. K.label(self.options.keys.inspect or "<C-h>") .. " Details"
+        data.help = data.help .. "  ·  ↑/↓ Select  ·  " .. K.label(self.options.keys.workspaces) .. " Workspaces  ·  "
+          .. K.label(self.options.keys.inspect or "<C-h>") .. " Details"
       end
     end
     local scene = ({ search = 'search', words = 'search', selector = 'tree', input = 'input', review = 'review' })[state.mode] or 'tree'
     opts = require('command_tree.presentation').options(self.options, state, scene, opts)
-    if data.details or data.diagnostic then data.help = data.help .. '  ·  '
-      .. Guide.hint_pair(self.options.keys.details_up or '<S-PageUp>', self.options.keys.details_down or '<S-PageDown>')
-      .. ' Scroll details' end
-    data.hints = Guide.help_hints(data.help)
+    if data.details or data.diagnostic then
+      local key = Guide.hint_pair(self.options.keys.details_up or '<S-PageUp>', self.options.keys.details_down or '<S-PageDown>')
+      if data.hints then picker_hint(data, key, 'Scroll details', 'information')
+      else data.help = data.help .. '  ·  ' .. key .. ' Scroll details' end
+    end
+    data.hints = data.hints or Guide.help_hints(data.help)
     state.page, state.pages = V.draw(state.view, data, opts)
     if state.mode == 'feedback' and not (state.view.details and state.view.details.win and vim.api.nvim_win_is_valid(state.view.details.win)) then
       -- Dynamic opt-out and very small screens still expose the complete bounded

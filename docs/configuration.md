@@ -144,6 +144,10 @@ is also available. Inspection installs no plugins, executables or servers.
 The first manual entry in each editor session offers a brief guide hint;
 `guidance.first_run = false` disables that hint. Editor in the workspace
 selector suspends command navigation and returns to the native editing window.
+From the command tree, the configured Workspaces key (`Ctrl-w` by default) opens
+that selector. Its Editor entry explains that the next plain entry resumes
+navigation. The Close key (`\` by default) resets navigation for the next entry;
+neither action cancels submitted Tasks.
 
 Leave an active workspace before choosing Editor; RE35 keeps its Settings drafts
 and resources intact if suspension is refused. The next plain `\` entry resumes
@@ -155,6 +159,9 @@ starts a fresh session instead of resuming the old destination.
 
 If Editor was selected from the workspace selector, resuming returns to that
 selector; press Esc to return to the preceding command tree.
+Ordinary resumption is silent. If you select a command with remembered inputs,
+its new form shows a neutral restoration notice; it still requires a fresh run
+decision, and any secrets or Apply confirmations must be entered again.
 
 `require('re35').suspend()` and `require('re35').resume()` also expose the
 transitions. `close()` disposes visible or suspended sessions without cancelling
@@ -205,7 +212,7 @@ host activation fails, Saved / Reload required distinguishes the disk state
 from the still-active previous environment. The status screen reports the
 storage owner; a theme preview is independent of a Settings draft.
 
-## Updating to 0.3.0
+## Updating to 0.3.1
 
 Keep a backup of your existing profile and configuration. Update RE35 without
 deleting its state directory or replacing the saved profile. Version 1 profiles
@@ -291,6 +298,13 @@ an error and keeps the previous environment. Successful replacement closes
 the open command UI, replaces its registry and editor hooks, and keeps the
 retained Task executor and running jobs. Setup is not a task-cancellation
 operation.
+
+A conflicting command path is rejected rather than silently reassigned. The
+error identifies the path, existing and requested command IDs, and the setup
+entry (`commands[n]` or `bindings[n]`). Choose another path to keep the current
+binding, unbind it first, or deliberately use `replace = true`. On the first
+setup there is no previous environment to preserve: correct the reported entry
+and retry setup. A rejected candidate does not partially activate its commands.
 
 `require('re35').disable()` closes the UI, removes entry/autocommand hooks and
 disposes registered extensions. Retained tasks and the API object remain

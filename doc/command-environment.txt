@@ -1,4 +1,4 @@
-*command-environment*  RE35 Command Environment 0.3.0 for Neovim
+*command-environment*  RE35 Command Environment 0.3.1 for Neovim
 
 SETUP                                                   *ce-setup*
 
@@ -25,7 +25,7 @@ sources and inconsistent replacement plans are rejected; the host owns review
 authorization and retains the reviewed arguments or plan.
 See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
 The optional VS Code host supports a subset of the Neovim environment.
-Version 0.3.0. See docs/compatibility.md for host support and known limitations.
+Version 0.3.1. See docs/compatibility.md for host support and known limitations.
 
 OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
 
@@ -80,6 +80,10 @@ enter secrets afresh. Ctrl-c, the Close key, and require('re35').close() dispose
 the session. Submitted background tasks retain their own lifetime.
 If Editor was chosen from the workspace selector, resuming returns to that
 selector; press Esc to return to the preceding command tree.
+Ctrl-w opens Workspaces from the command tree by default. Editor keeps navigation
+for the next entry; Close resets navigation. Neither cancels submitted Tasks.
+Ordinary resumption is silent. Restoring a command's nonsecret inputs shows a
+neutral notice in its new form, where a fresh run decision is still required.
 
 require('re35').suspend() and require('re35').resume() expose the same
 transitions. Pass {interactive=false} to resume() for scripted control.
@@ -404,7 +408,7 @@ is rejected. A selected sequence is remembered per buffer in bounded memory,
 but reopening History never automatically restores a state. The list refreshes
 after restore. history.timeline_stay_open=false exits Timeline after restore;
 history.position overrides placement. require('re35').version is
-'0.3.0'.
+'0.3.1'.
 Tasks uses a theme color; j/k selects, Enter details, Esc returns, x/Ctrl-x
 cancels explicitly; r reruns a completed operation, s returns to its source.
 For failed recipes, c opens owned source Results or relevant step Settings.

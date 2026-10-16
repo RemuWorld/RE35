@@ -10,7 +10,9 @@ local function eq(expected, actual, label)
 end
 local function fails(callback, label)
   checks = checks + 1
-  assert(not pcall(callback), label)
+  local ok, reason = pcall(callback)
+  assert(not ok, label)
+  return tostring(reason)
 end
 local registry, calls = Registry.new(), 0
 -- These metadata fixtures represent no-op actions; missing-target rejection is
@@ -39,7 +41,13 @@ eq("run.default", registry:node("r").command_id, "Executable branches keep their
 eq("run.debug", registry:node("r").children.d.command_id, "Executable branches keep their children")
 fails(function() registry:register({ id = "run.default" }) end, "IDs cannot be silently overwritten")
 fails(function() registry:register({ id = "other", aliases = { "fmt" } }) end, "Aliases cannot be silently overwritten")
-fails(function() registry:register({ id = "other", path = "cf", aliases = { "other_alias" } }) end, "Paths cannot be silently overwritten")
+local collision = fails(function() registry:register({ id = "other", path = "cf", aliases = { "other_alias" } }) end,
+  "Paths cannot be silently overwritten")
+eq(true, collision:find("already bound: cf", 1, true) ~= nil, "Registration conflict identifies its path")
+eq(true, collision:find("existing: code.format; requested: other", 1, true) ~= nil,
+  "Registration conflict identifies both command owners")
+eq(true, collision:find("Choose another path", 1, true) ~= nil and collision:find("replace = true", 1, true) ~= nil,
+  "Registration conflict explains explicit recovery choices")
 eq(nil, registry:get("other"), "Failed registration leaves no command")
 eq(nil, registry:get("other_alias"), "Failed registration leaves no alias")
 fails(function() registry:register({ id = "other", path = { "abc" } }) end, "Array segments must each be one key")
@@ -187,6 +195,12 @@ local limited = catalog:search('', { ready = true }, { limit = 12 })
 eq(12, #limited, 'A 10000-command catalog searches and limits without a global clone budget failure')
 eq(10000, evaluations, 'Filtering still evaluates contextual capabilities before limiting results')
 eq(true, limited[1].command == catalog:get(limited[1].id), 'Limited discovery returns current host descriptor identities')
+local generation = registry.generation
+local binding_collision = fails(function() registry:bind("cf", "other") end, "Binding conflict requires explicit replacement")
+eq(true, binding_collision:find("existing: code.format; requested: other", 1, true) ~= nil,
+  "Binding conflict identifies both command owners")
+eq(generation, registry.generation, "Rejected binding leaves index generation unchanged")
+eq("code.format", registry:node("cf").command_id, "Rejected binding preserves the original path owner")
 registry:bind("cf", "other", { replace = true })
 eq("other", registry:node("cf").command_id, "Explicit path replacement")
 registry:unbind("f")

@@ -14,9 +14,16 @@ vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_dark_only'", "vim.o.backgr
 vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_broken'", "vim.o.background = 'light'",
   "error('appearance fixture preview failure')" }, runtime .. '/colors/re35_fixture_broken.lua')
 vim.opt.runtimepath:prepend(runtime)
-vim.o.columns, vim.o.lines = 120, 42
+vim.o.columns, vim.o.lines = 200, 60
 local function keys(value) for _, key in ipairs(K.tokens(value)) do session:handle(key) end end
 local function saved(path) return table.concat(vim.fn.readfile(path), '\n') end
+local function text(part)
+  return part and part.buf and vim.api.nvim_buf_is_valid(part.buf)
+    and table.concat(vim.api.nvim_buf_get_lines(part.buf, 0, -1, false), '\n'):gsub('%s+', ' ') or ''
+end
+local function hint(part, key, label)
+  H.ok(text(part):find(key .. ' ' .. label, 1, true), 'Theme guide exposes ' .. key .. ' ' .. label)
+end
 local function setup(density, path, integration, persist)
   local profile = Profile.empty()
   profile.presentation = { version = 1, selected = density, presets = {} }
@@ -37,6 +44,32 @@ for _, density in ipairs({ 'full', 'compact', 'minimal' }) do
   H.eq(1, #input.command.arguments, density .. ': one Theme choice preserves the direct picker flow')
   H.eq('dark', input.args.background, density .. ': draft starts with actual appearance')
   H.eq(true, input.args.preview, density .. ': navigating previews by default')
+  if density == 'full' then
+    H.ok(state.view.guide and vim.api.nvim_win_is_valid(state.view.guide.win), 'Actual Full theme picker has a side Keys panel')
+    H.eq('right', state.view.panel_report.guide)
+    hint(state.view.guide, '↑/↓', 'Select'); hint(state.view.guide, 'PgUp/Down', 'Page')
+    hint(state.view.guide, 'Ctrl+b', 'Light/Dark'); hint(state.view.guide, 'Ctrl+t', 'Auto preview')
+    hint(state.view.guide, 'Enter', 'Confirm'); hint(state.view.guide, 'Esc', 'Cancel')
+    keys('/')
+    hint(state.view.guide, 'Esc', 'Finish filter')
+    H.ok(not text(state.view.guide):find('Ctrl+b', 1, true) and not text(state.view.guide):find('Ctrl+t', 1, true),
+      'Filter mode never advertises disabled appearance controls as active shortcuts')
+    keys('<C-b><C-t>')
+    H.eq('dark', input.args.background, 'Filter editing cannot toggle Light/Dark')
+    H.eq(true, input.args.preview, 'Filter editing cannot toggle automatic preview')
+    keys('<Esc>')
+    hint(state.view.guide, 'Ctrl+b', 'Light/Dark'); hint(state.view.guide, 'Ctrl+t', 'Auto preview')
+    vim.o.columns = 90; session:draw()
+    H.eq(nil, state.view.guide, 'Narrowing the actual theme picker releases the side guide')
+    H.eq('below', state.view.panel_report.guide, 'Narrow theme picker reports its complete below fallback')
+    local below = table.concat(state.view.details.lines, '\n'):gsub('%s+', ' ')
+    H.ok(below:find('Ctrl+b', 1, true), 'Narrow fallback retains theme controls in scrollable details')
+    H.ok(below:find('Ctrl+t', 1, true), 'Narrow fallback retains auto-preview in scrollable details')
+    vim.o.columns = 200; session:draw()
+    hint(state.view.guide, 'Ctrl+b', 'Light/Dark')
+  else
+    H.eq(nil, state.view.guide, density .. ': does not add a Full-only side guide')
+  end
   keys('<C-b>')
   H.eq('light', input.args.background, density .. ': explicit Light/Dark control updates the draft')
   H.eq('light', vim.o.background, density .. ': enabled preview shows the chosen appearance')

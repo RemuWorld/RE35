@@ -31,6 +31,14 @@ local function tokens(path)
 end
 
 local function path_key(path) return table.concat(path, "\0") end
+local function check_path_owner(node, parts, id, replace)
+  if node and node.command_id and node.command_id ~= id and not replace then
+    error("Command path is already bound: " .. table.concat(parts)
+      .. " (existing: " .. node.command_id .. "; requested: " .. id .. "). "
+      .. "Choose another path to keep the existing command, unbind this path first, "
+      .. "or set replace = true to replace it explicitly.", 2)
+  end
+end
 local function reserved_allows(rule, id, command)
   if rule == nil or rule == false then return true end
   if type(rule) == "string" then return id == rule end
@@ -226,8 +234,7 @@ function Registry:bind(path, id, opts)
   assert(#parts > 0, "A command path cannot be empty")
   validate_path(self, parts, id, command)
   local node = locate(self, parts, false)
-  assert(not node or not node.command_id or node.command_id == id or (opts and opts.replace),
-    "Command path is already bound: " .. table.concat(parts))
+  check_path_owner(node, parts, id, opts and opts.replace)
   node = node or locate(self, parts, true)
   if node.command_id ~= id then
     local key = path_key(parts)
@@ -302,8 +309,7 @@ local function register(self, spec, owned)
     assert(#parts > 0, "A command path cannot be empty")
     validate_path(self, parts, id, spec)
     local node = locate(self, parts, false)
-    assert(not node or not node.command_id or node.command_id == id or spec.replace,
-      "Command path is already bound: " .. table.concat(parts))
+    check_path_owner(node, parts, id, spec.replace)
   end
   for _, path in pairs(self._placements[id] or {}) do validate_path(self, path, id, spec) end
   command.path, command.replace = nil, nil

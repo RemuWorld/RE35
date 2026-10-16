@@ -8,7 +8,7 @@ not required. Optional integrations have their own prerequisites; the
 ## Choose a source revision
 
 The public repository is [RemuWorld/RE35](https://github.com/RemuWorld/RE35).
-Pin a version tag such as `v0.3.0` to install that version.
+Pin a version tag such as `v0.3.1` to install that version.
 Use `main` only to follow ongoing development.
 
 Install the complete source layout from one revision. Check its runtime version
@@ -21,14 +21,14 @@ and known limitations.
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.3.0",
+  tag = "v0.3.1",
   config = function()
     require("re35").setup()
   end,
 }
 ```
 
-To follow development, replace `tag = "v0.3.0"` with `branch = "main"`.
+To follow development, replace `tag = "v0.3.1"` with `branch = "main"`.
 Use the plugin manager's normal install/update commands. Inspect any lockfile or
 configured revision before expecting an update.
 
@@ -45,10 +45,10 @@ re35_data_root="${XDG_DATA_HOME:-$HOME/.local/share}"
 re35_app_name="${NVIM_APPNAME:-nvim}"
 re35_parent="$re35_data_root/$re35_app_name/site/pack/re35/start"
 mkdir -p "$re35_parent"
-git clone --branch v0.3.0 https://github.com/RemuWorld/RE35.git "$re35_parent/RE35"
+git clone --branch v0.3.1 https://github.com/RemuWorld/RE35.git "$re35_parent/RE35"
 ```
 
-To follow development, use `--branch main` instead of `--branch v0.3.0`.
+To follow development, use `--branch main` instead of `--branch v0.3.1`.
 If the destination already exists, inspect it and update the intended checkout.
 
 ## Manual install on Windows or another layout
@@ -59,7 +59,7 @@ Inside Neovim, find the active data directory:
 :lua print(vim.fn.stdpath('data'))
 ```
 
-Clone or place the complete repository from tag `v0.3.0` at
+Clone or place the complete repository from tag `v0.3.1` at
 `site/pack/re35/start/RE35` below that directory. Keep `lua/re35.lua`,
 `lua/command_tree`, `lua/command_environment` and the accompanying files from
 the same revision.
@@ -80,7 +80,7 @@ runtime directory and uses your existing Neovim configuration.
 :lua print(debug.getinfo(require('re35').setup, 'S').source)
 ```
 
-Tag `v0.3.0` should report `0.3.0`. The reported version should match your chosen tag.
+Tag `v0.3.1` should report `0.3.1`. The reported version should match your chosen tag.
 The source path should be inside the intended installation. Remove an older
 duplicate runtimepath entry if it shadows
 that source. `require('command_tree')` is the same compatible API object, so an

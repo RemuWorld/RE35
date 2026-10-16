@@ -3,6 +3,11 @@ local K, T = require('command_tree.keys'), require('command_tree.triggers')
 local Profile, Options = require('command_tree.profile'), require('command_tree.environment.options')
 local M = {}
 local defaults, mapping_keys, validate_options = Options.defaults, Options.mapping_keys, Options.validate
+local function declaration(origin, callback, ...)
+  local ok, result = pcall(callback, ...)
+  if not ok then error(origin .. ": " .. tostring(result), 0) end
+  return result
+end
 local function register_workspace(env, spec)
   assert(type(spec) == "table", "Workspace must be a table")
   local previous, order = env.workspaces:get(spec.id), vim.deepcopy(env.workspaces.order)
@@ -99,9 +104,13 @@ local function prepare_environment(opts, pending)
   env.executor = require("command_tree.executor").new(registry, usage)
   require("command_tree.defaults").register(registry, options)
   require("command_tree.file_search").register(env)
-  for _, spec in ipairs(options.commands) do registry:register(spec) end
-  for _, binding in ipairs(options.bindings) do
-    if binding.id == false then registry:unbind(binding.path) else registry:bind(binding.path, binding.id, { replace = binding.replace }) end
+  for index, spec in ipairs(options.commands) do
+    declaration("commands[" .. index .. "]", registry.register, registry, spec)
+  end
+  for index, binding in ipairs(options.bindings) do
+    local origin = "bindings[" .. index .. "]"
+    if binding.id == false then declaration(origin, registry.unbind, registry, binding.path)
+    else declaration(origin, registry.bind, registry, binding.path, binding.id, { replace = binding.replace }) end
   end
   for _, spec in ipairs(options.workspaces.definitions) do register_workspace(env, spec) end
   require("command_tree.settings").register(registry, options)

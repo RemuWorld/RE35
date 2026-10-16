@@ -508,12 +508,10 @@ function P.draw(V, view, data, opts, groups)
   Panels.main(view, lines, config, opts)
   V.window(view, lines, config)
   if opts._display.source == 'preset' then
-    vim.wo[view.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. groups.accent
+    vim.wo[view.win].winhighlight = 'Normal:' .. groups.normal .. ',FloatBorder:' .. (groups.border or groups.accent)
       .. ',FloatTitle:' .. groups.accent .. ',EndOfBuffer:' .. groups.normal
   elseif opts.accent then
-    local group = 'CommandTreeAccent' .. tostring(opts.accent):gsub('[^%w]', '')
-    local background = vim.api.nvim_get_hl(0, { name = 'NormalFloat', link = false }).bg
-    vim.api.nvim_set_hl(0, group, { fg = opts.accent, bg = background })
+    local group = groups.border
     vim.wo[view.win].winhighlight = 'Normal:CommandTreeNormal,FloatBorder:' .. group .. ',FloatTitle:' .. group .. ',EndOfBuffer:CommandTreeNormal'
   end
   vim.api.nvim_buf_clear_namespace(view.buf, ns, 0, -1)

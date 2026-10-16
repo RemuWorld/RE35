@@ -9,7 +9,7 @@ workflow semantics. Hosts connect those definitions to their UI, editor services
 and tools. Portable profiles carry user declarations; supported operations and
 live task history depend on the host.
 
-**Version 0.3.0.** Neovim is the primary host.
+**Version 0.3.1.** Neovim is the primary host.
 The optional VS Code desktop development host supports a defined subset of
 document and project workflows. See [command coverage](docs/command-coverage.md)
 and [compatibility](docs/compatibility.md) for supported scope and limitations.
@@ -28,9 +28,9 @@ Press `\` to open RE35; ordinary Normal-mode keys remain available before entry.
 - Edit portable profiles, custom commands and workspace bindings.
 - Create, edit and share appearance presets, including Full, Compact and Minimal views.
 
-0.3.0 improves editor return/resume and recipe recovery, unifies layout
-calculation, and adds Light/Dark and preview controls, list paging and stable
-search selection. Existing profiles and shared contract versions are retained.
+0.3.1 restores contextual picker guidance, quiets ordinary editor return,
+aligns panel borders and makes command-path conflicts easier to diagnose.
+Existing profiles, exit behavior and shared contract versions are retained.
 
 ## Install
 
@@ -39,7 +39,7 @@ With lazy.nvim, pin the version you want to use:
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.3.0",
+  tag = "v0.3.1",
   config = function()
     require("re35").setup()
   end,
@@ -78,7 +78,7 @@ Shift-PageDown scroll the independent details panel. Leave any active workspace,
 then select Editor to return to native editing; the next plain `\` entry resumes
 navigation. See [configuration](docs/configuration.md) for theme
 persistence, theme controls, list navigation and panel options. The
-[update checks](docs/configuration.md#updating-to-030) describe useful
+[update checks](docs/configuration.md#updating-to-031) describe useful
 flows to try with your own configuration.
 
 ## Other integrations

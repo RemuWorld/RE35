@@ -105,6 +105,64 @@ keys('<F7>'); H.eq(1, input.selected)
 local registered = pcall(CE.bind, { '<F8>' }, 'fixture.custom_pages')
 H.eq(false, registered, 'Configured page controls cannot be rebound as executable tree commands')
 
+-- Actual Session-built guidance retains configured keys without parsing the
+-- displayed page pair. Custom adapter prose still owns its original fallback.
+vim.o.columns, vim.o.lines = 200, 60
+session.active.density = 'full'; session:draw()
+H.ok(state.view.guide and vim.api.nvim_win_is_valid(state.view.guide.win), 'An actual Full picker renders a side Keys panel')
+local function panel_text(part)
+  if not part then return '' end
+  return table.concat(part.lines or vim.api.nvim_buf_get_lines(part.buf, 0, -1, false), '\n'):gsub('%s+', ' ')
+end
+H.ok(panel_text(state.view.guide):find('F7/F8 Page', 1, true), 'Picker guide shows the configured page controls')
+H.ok(panel_text(state.view.guide):find('↑/↓ Select', 1, true), 'Picker guide shows ordinary selection controls')
+CE.register({ id = 'fixture.raw_help', name = 'Custom picker help', arguments = {
+  { name = 'choice', kind = 'select', required = true, items = choices } },
+  input_ui = { status = function() return { help = 'Custom adapter explanation without shortcut grammar' } end },
+  run = function() runs = runs + 1 end })
+state, input = open('fixture.raw_help', 'full')
+H.eq(nil, state.view.guide, 'Unrecognized adapter help keeps the below-panel fallback')
+H.ok(panel_text(state.view.details):gsub('%s', ''):find(('Custom adapter explanation without shortcut grammar'):gsub('%s', ''), 1, true),
+  'Structured built-in controls never discard custom adapter prose')
+
+-- The existing temporary editor destination is discoverable from ordinary
+-- tree navigation, and its details explain how it differs from final close.
+CE.close(); CE.open({ interactive = false }); state = session.active
+local guide = panel_text(state.view.guide)
+H.ok(guide:find('Ctrl+w Workspaces', 1, true), 'Ordinary tree guidance advertises the configured workspace route')
+H.ok(guide:find('Close session', 1, true), 'Ordinary tree guidance names the final close operation')
+keys('<C-w>')
+local destinations = session:workspace_choices()
+for index, destination in ipairs(destinations) do if destination.destination == 'editor' then state.selected = index; break end end
+session:draw()
+local editor_details = panel_text(state.view.details):gsub('%s', '')
+H.ok(editor_details:find('entryresumesnavigation', 1, true), 'Editor destination explains resuming')
+H.ok(editor_details:find('nextentrystartsfresh', 1, true), 'Editor destination explains final Close session')
+H.ok(editor_details:find('Submittedbackgroundtaskscontinue', 1, true), 'Editor destination describes submitted task lifetime')
+
+-- The native replacement's last boolean submits immediately. Its guide must
+-- never promise another Review screen before the selected Apply/Cancel effect.
+CE.close()
+local source = vim.api.nvim_get_current_buf()
+vim.api.nvim_buf_set_lines(source, 0, -1, true, { 'before replacement' })
+local operation_count = #CE.operations()
+H.ok(CE.execute('edit.replace_literal', { find = 'before', replace = 'after' }, { interactive = false }))
+state, input = session.active, session.active.input
+H.eq('confirm', input.command.arguments[input.index].name)
+H.ok(panel_text(state.view.guide):find('Enter Apply / Cancel', 1, true), 'Explicit-Apply picker advertises the immediate action')
+H.eq(false, input.choices[input.selected].value)
+keys('<CR>')
+H.eq({ 'before replacement' }, vim.api.nvim_buf_get_lines(source, 0, -1, true), 'One Enter on Cancel preserves the source')
+H.eq(operation_count, #CE.operations(), 'Explicit Cancel opens no replacement operation')
+H.ok(CE.execute('edit.replace_literal', { find = 'before', replace = 'after' }, { interactive = false }))
+state, input = session.active, session.active.input
+if input.choices[input.selected].value ~= true then keys('<Down>') end
+H.ok(panel_text(state.view.guide):find('Enter Apply / Cancel', 1, true), 'Selected Apply still advertises immediate execution')
+H.eq({ 'before replacement' }, vim.api.nvim_buf_get_lines(source, 0, -1, true), 'Selecting Apply alone cannot mutate the source')
+keys('<CR>')
+H.eq({ 'after replacement' }, vim.api.nvim_buf_get_lines(source, 0, -1, true), 'One Enter on Apply performs the reviewed buffer edit')
+H.eq(nil, session.active, 'Explicit Apply does not insert another Review screen')
+
 -- Native hooks receive detached drafts, but can still reenter the host. Their
 -- retired return values must never repaint an old surface or restore its args.
 local retired, retired_input, previews, cleanups = nil, nil, 0, 0

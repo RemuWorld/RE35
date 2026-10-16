@@ -98,9 +98,13 @@ local function open_form(self, state, command, args, ctx, route, done, missing)
   if route then state.path = vim.deepcopy(route) end
   state.input = { command = command, args = vim.tbl_extend('force', {}, draft and draft.args or {}, vim.deepcopy(args or {})),
     drafts = draft and draft.drafts or {}, index = draft and draft.index or missing, done = done, context = vim.deepcopy(ctx) }
+  local input, attachment = state.input, state.input_attachment
   local ok, err = pcall(self.input_field, self)
   if not ok then state.message = tostring(err) end
-  if draft and ok and not state.message then state.message = 'Restored unsaved inputs; review them before running' end
+  if draft and (next(draft.args) or next(draft.drafts)) and ok and not state.message
+    and self:is_attached(state, attachment) and state.input == input then
+    self:set_notice('Restored unsaved inputs; review them before running', 'Inputs restored · review before running')
+  end
   return true
 end
 
