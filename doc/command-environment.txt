@@ -1,4 +1,4 @@
-*command-environment*  RE35 Command Environment 0.3.1 for Neovim
+*command-environment*  RE35 Command Environment 0.3.2 for Neovim
 
 SETUP                                                   *ce-setup*
 
@@ -25,7 +25,7 @@ sources and inconsistent replacement plans are rejected; the host owns review
 authorization and retains the reviewed arguments or plan.
 See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
 The optional VS Code host supports a subset of the Neovim environment.
-Version 0.3.1. See docs/compatibility.md for host support and known limitations.
+Version 0.3.2. See docs/compatibility.md for host support and known limitations.
 
 OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
 
@@ -63,6 +63,8 @@ Ctrl-t toggles automatic preview outside filter editing. Enter confirms the
 selected theme and appearance; Esc restores both. :set background changes the
 editor only until a theme is explicitly confirmed here. Storage failures remain
 visible and do not claim a successful save.
+Fixed-appearance schemes such as peachpuff require Light. An incompatible
+appearance is rejected with restoration; Ctrl-b selects the supported appearance.
 
 Single Up/Down selection wraps by default; navigation.wrap = false clamps it.
 Page/output scrolling and text editing do not wrap. The main command panel
@@ -408,7 +410,7 @@ is rejected. A selected sequence is remembered per buffer in bounded memory,
 but reopening History never automatically restores a state. The list refreshes
 after restore. history.timeline_stay_open=false exits Timeline after restore;
 history.position overrides placement. require('re35').version is
-'0.3.1'.
+'0.3.2'.
 Tasks uses a theme color; j/k selects, Enter details, Esc returns, x/Ctrl-x
 cancels explicitly; r reruns a completed operation, s returns to its source.
 For failed recipes, c opens owned source Results or relevant step Settings.

@@ -52,12 +52,16 @@ function M.new(options)
     local ok, failure = pcall(function()
       if background then vim.o.background = background end
       apply(name)
-      -- A colorscheme may select its own appearance while loading. The picker
-      -- must either apply the explicitly chosen value or report the mismatch,
-      -- never save a different value under a Light/Dark confirmation.
-      if background and vim.o.background ~= background then vim.o.background = background end
-      assert(not background or vim.o.background == background,
-        'Colorscheme ' .. tostring(name) .. ' does not retain the requested ' .. tostring(background) .. ' appearance')
+      -- Fixed-appearance schemes may change this option while loading. Setting
+      -- it again can reload the scheme and discard colors_name without making
+      -- its actual palette match. Reject that mismatch and restore the original
+      -- pair instead of manufacturing support for the requested appearance.
+      if background and vim.o.background ~= background then
+        local actual = vim.o.background
+        error('Colorscheme ' .. tostring(name) .. ' selected ' .. actual .. ' appearance; requested ' .. background
+          .. '. Choose ' .. (actual == 'light' and 'Light' or 'Dark')
+          .. ' with Ctrl-b in Select theme, or choose another theme.', 0)
+      end
     end)
     if not ok then
       local restored, restore_error = pcall(restore)
@@ -107,7 +111,7 @@ function M.new(options)
     if not args.theme or args.preview == false then return end
     local restore
     restore, failure = change(args.theme, args.background)
-    if not restore then error(failure) end
+    if not restore then error(failure, 0) end
     return restore
   end
   function adapter.commit(_, args)

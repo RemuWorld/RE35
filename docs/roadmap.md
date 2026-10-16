@@ -7,7 +7,7 @@ explicit host contracts keep that model reusable.
 
 ## Current scope
 
-RE35 0.3.1 includes the command, recipe, Results/recovery and presentation
+RE35 0.3.2 includes the command, recipe, Results/recovery and presentation
 workflows from 0.1.0, with remembered themes, list wrapping, inspectable
 errors, storage-state labels, first-use guidance, an Editor return destination
 and independent command/details panels. It also separates editor handoff from

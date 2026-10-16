@@ -11,6 +11,9 @@ vim.fn.mkdir(runtime .. '/colors', 'p')
 vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_adaptive'" }, runtime .. '/colors/re35_fixture_adaptive.lua')
 vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_dark_only'", "vim.o.background = 'dark'" },
   runtime .. '/colors/re35_fixture_dark_only.lua')
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_light_only'", "vim.o.background = 'light'" },
+  runtime .. '/colors/re35_fixture_light_only.lua')
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_adaptive'" }, runtime .. '/colors/re35_fixture_alias.lua')
 vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_broken'", "vim.o.background = 'light'",
   "error('appearance fixture preview failure')" }, runtime .. '/colors/re35_fixture_broken.lua')
 vim.opt.runtimepath:prepend(runtime)
@@ -106,9 +109,21 @@ end
 vim.cmd.colorscheme('default'); vim.o.background = 'dark'
 local path = folder .. '/conflict.json'
 setup('full', path)
-local ok, why = CE.execute('ui.theme', { theme = 're35_fixture_dark_only', background = 'light' }, { interactive = false })
-H.ok(ok, tostring(why)); H.eq('light', vim.o.background)
-H.eq('light', H.ok(State.read(path)).background, 'Explicit appearance is reapplied after a scheme changes it while loading')
+for _, conflict in ipairs({ { 're35_fixture_dark_only', 'light', 'dark' }, { 're35_fixture_light_only', 'dark', 'light' } }) do
+  vim.cmd.colorscheme('default'); vim.o.background = conflict[3]
+  local ok, why = CE.execute('ui.theme', { theme = conflict[1], background = conflict[2] }, { interactive = false })
+  H.eq(false, ok, 'Fixed-appearance schemes reject the opposite requested appearance')
+  H.ok(tostring(why):find('selected ' .. conflict[3] .. ' appearance; requested ' .. conflict[2], 1, true),
+    'Appearance mismatch explains the actual and requested values')
+  H.ok(tostring(why):find('Ctrl-b', 1, true), 'Appearance mismatch explains how to select the compatible appearance')
+  H.eq('default', vim.g.colors_name, 'Rejected appearance preserves the original theme identity')
+  H.eq(conflict[3], vim.o.background, 'Rejected appearance restores the original background')
+  H.eq(nil, vim.uv.fs_stat(path), 'Rejected appearance never creates startup state')
+end
+H.ok(CE.execute('ui.theme', { theme = 're35_fixture_alias', background = 'light' }, { interactive = false }),
+  'A valid theme alias need not assign colors_name equal to its filename')
+H.eq('re35_fixture_adaptive', vim.g.colors_name)
+H.eq('re35_fixture_alias', H.ok(State.read(path)).theme, 'Persistence retains the user-selected runtime alias')
 vim.cmd.colorscheme('default'); vim.o.background = 'dark'
 for _, args in ipairs({ { theme = 'default', background = 'sepia' }, { theme = 'default', preview = 'off' } }) do
   H.eq(false, CE.execute('ui.theme', args, { interactive = false }), 'Malformed native options fail before applying')
@@ -131,7 +146,81 @@ H.eq('default', vim.g.colors_name); H.eq('dark', vim.o.background, 'A failed exp
 H.eq(confirmed, saved(path), 'Failed preview and commit preserve previously confirmed startup state')
 CE.close()
 
+-- Peachpuff is a real light-only runtime scheme. Forcing background back to
+-- dark used to clear colors_name while retaining its light palette, yet report
+-- a successful dark preview/commit. Exercise the actual picker and diagnostics.
+local peach_path = folder .. '/peachpuff.json'
+vim.cmd.colorscheme('desert'); vim.o.background = 'dark'
+setup('full', peach_path)
+H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+keys('/peachpuff<Esc>')
+local peach_input, peach_state = session.active.input, session.active
+H.eq('peachpuff', peach_input.choices[peach_input.selected].value)
+H.eq('dark', peach_input.args.background, 'Failed preview retains the pending requested appearance')
+H.eq('desert', vim.g.colors_name, 'Incompatible Peachpuff preview restores the original theme identity')
+H.eq('dark', vim.o.background, 'Incompatible Peachpuff preview restores the original appearance')
+H.eq(nil, vim.uv.fs_stat(peach_path), 'Rejected Peachpuff preview never saves')
+failure = require('command_tree.session.feedback').current(peach_state)
+H.ok(failure and failure.full_message:find('selected light appearance; requested dark', 1, true),
+  'Actual Peachpuff preview exposes its incompatibility as an inspectable error')
+local mismatch_summary = failure.full_message:match('^[^\n]+')
+H.ok(mismatch_summary:find('Colorscheme peachpuff', 1, true) and not mismatch_summary:find('themes.lua', 1, true),
+  'Expected appearance mismatch starts with useful feedback instead of adapter source paths')
+H.ok(text(peach_state.view.details):find('peachpuff', 1, true), 'Peachpuff preview error is visible below the picker')
+hint(peach_state.view.guide, 'Ctrl+b', 'Light/Dark')
+hint(peach_state.view.guide, 'Ctrl+h', 'Inspect error')
+keys('<C-h>')
+H.eq('feedback', session.active.mode, 'Preview mismatch opens the existing full diagnostic view')
+H.ok(session.active.feedback_inspection.full_message:find('requested dark', 1, true),
+  'Full diagnostic retains the incompatible requested appearance')
+local function requested_visible()
+  return (text(session.active.view) .. ' ' .. text(session.active.view.details)):gsub('%s+', ''):find('requesteddark', 1, true)
+end
+local diagnostic = session.active.view.details
+for _ = 1, diagnostic and diagnostic.total or 0 do
+  if requested_visible() then break end
+  require('command_tree.view').scroll_details(session.active.view, 1)
+end
+H.ok(requested_visible(), 'Complete mismatch explanation remains reachable by scrolling the diagnostic panel')
+keys('<Esc><C-b>')
+H.eq(peach_input, session.active.input, 'Inspecting the error preserves the attached picker')
+H.eq('light', peach_input.args.background)
+H.eq('peachpuff', vim.g.colors_name, 'Compatible Light preview retains the real theme identity')
+H.eq('light', vim.o.background)
+H.eq(nil, require('command_tree.session.feedback').current(peach_state), 'Successful Light preview clears the old incompatibility error')
+H.eq(nil, vim.uv.fs_stat(peach_path), 'Compatible preview is still temporary')
+keys('<CR>')
+H.eq('peachpuff', vim.g.colors_name); H.eq('light', vim.o.background)
+local peach_saved = H.ok(State.read(peach_path))
+H.eq('peachpuff', peach_saved.theme); H.eq('light', peach_saved.background, 'Confirm saves the compatible pair only')
+local peach_confirmed = saved(peach_path)
+CE.close()
+vim.cmd.colorscheme('desert'); vim.o.background = 'dark'
+H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+keys('/peachpuff<Esc><C-b>')
+H.eq('peachpuff', vim.g.colors_name); H.eq('light', vim.o.background)
+keys('<Esc>')
+H.eq('desert', vim.g.colors_name); H.eq('dark', vim.o.background, 'Cancelling Peachpuff returns to the original pair')
+H.eq(peach_confirmed, saved(peach_path), 'Cancelling a later preview never rewrites the confirmed pair')
+CE.close()
+H.ok(CE.execute('ui.theme', { theme = 'peachpuff' }, { interactive = false }),
+  'Theme-only callers retain native behavior for fixed-appearance themes')
+H.eq('peachpuff', vim.g.colors_name); H.eq('light', vim.o.background)
+local incompatible_path = folder .. '/incompatible-startup.json'
+H.ok(State.write(incompatible_path, 'peachpuff', 'dark'))
+local incompatible_saved = saved(incompatible_path)
+vim.cmd.colorscheme('desert'); vim.o.background = 'dark'
+local incompatible = require('command_tree.integrations.themes').new({ persist = true, path = incompatible_path })
+local restored, incompatible_status = incompatible.restore()
+H.eq(false, restored, 'Previously saved incompatible Peachpuff/Dark startup state is rejected')
+H.eq('restore_failed', incompatible_status.state)
+H.ok(incompatible_status.error:find('selected light appearance; requested dark', 1, true))
+H.eq('desert', vim.g.colors_name); H.eq('dark', vim.o.background, 'Rejected startup appearance restores the current pair')
+H.eq(incompatible_saved, saved(incompatible_path), 'Rejected startup state remains untouched for explicit user recovery')
+
 -- Storage failure keeps the applied pair and accurately reports session scope.
+setup('full', path)
+vim.cmd.colorscheme('default'); vim.o.background = 'dark'
 session.drafts:forget('ui.theme', K.context().buf)
 H.ok(CE.open({ command = 'ui.theme', interactive = false }))
 keys('<C-b><C-t>')

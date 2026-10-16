@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.2
+
+- Reject incompatible colorscheme appearances instead of forcing a background
+  option that can clear the active colorscheme identity. Restore the previous
+  theme/appearance and preserve startup storage on failure. Peachpuff works
+  with Light; choosing Dark reports the incompatibility.
+
 ## 0.3.1
 
 - Restore Full's contextual Keys panel in choice pickers, including selection,

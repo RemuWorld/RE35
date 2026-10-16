@@ -125,6 +125,9 @@ Preview starts enabled each time the picker opens. Turning it off restores the
 original theme and appearance; selecting another name then has no editor effect
 until `Enter` confirms it. Confirmation applies and saves that exact theme and
 appearance (or reports why the scheme cannot retain the requested appearance).
+Some schemes support only one appearance: `peachpuff`, for example, selects
+Light. Choose Light with `Ctrl-b` before confirming it. An incompatible choice
+restores the previous theme and appearance and leaves startup storage unchanged.
 `Esc` cancels both drafts and leaves the previously saved choice unchanged.
 Changing `:set background=light` or `:set background=dark` outside this picker
 affects the editor immediately but does not rewrite saved startup state. Open
@@ -212,7 +215,7 @@ host activation fails, Saved / Reload required distinguishes the disk state
 from the still-active previous environment. The status screen reports the
 storage owner; a theme preview is independent of a Settings draft.
 
-## Updating to 0.3.1
+## Updating to 0.3.2
 
 Keep a backup of your existing profile and configuration. Update RE35 without
 deleting its state directory or replacing the saved profile. Version 1 profiles
