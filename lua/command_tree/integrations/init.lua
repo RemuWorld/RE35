@@ -28,7 +28,8 @@ function M.resolve(options)
     if resolved.theme.input_ui ~= nil then
       assert(type(resolved.theme.input_ui) == 'table', 'integrations.theme.input_ui must be a table')
       for name, callback in pairs(resolved.theme.input_ui) do
-        assert(name == 'init' or name == 'handle' or name == 'status', 'Unknown theme input UI callback: ' .. tostring(name))
+        assert(name == 'init' or name == 'handle' or name == 'status' or name == 'choices'
+          or name == 'subscribe' or name == 'preview_key' or name == 'inspect', 'Unknown theme input UI callback: ' .. tostring(name))
         assert(type(callback) == 'function', 'integrations.theme.input_ui.' .. name .. ' must be a function')
       end
     end

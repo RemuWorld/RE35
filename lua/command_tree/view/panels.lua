@@ -3,6 +3,7 @@
 local M = {}
 local ns = vim.api.nvim_create_namespace('CommandTreeDetails')
 local Guide = require('command_tree.session.key_guide')
+local Text = require('command_tree.view.text_layout')
 
 local function role_group(role, groups)
   return groups and groups[role] or ({ normal = 'CommandTreeDesc', accent = 'CommandTreeKey',
@@ -47,15 +48,9 @@ function M.help_rows(V, data, width, groups)
         if V.width(key) > width then key = V.clip('…', width) end
         chunks[#chunks + 1] = { key, role_group('accent', groups) }
         emit()
-        local current = ''
-        for char in label:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-          if V.width(current .. char) > width then
-            if current ~= '' then rows[#rows + 1] = { { current, role_group('normal', groups) } }; current = '' end
-            if V.width(char) > width then char = V.clip(char, width) end
-          end
-          current = current .. char
+        for _, text in ipairs(Text.wrap(label, width, V.width)) do
+          rows[#rows + 1] = { { text, role_group('normal', groups) } }
         end
-        if current ~= '' then rows[#rows + 1] = { { current, role_group('normal', groups) } } end
         key, label, separator = '', '', ''
       end
       if key ~= '' or label ~= '' then
@@ -70,23 +65,13 @@ function M.help_rows(V, data, width, groups)
   return #rows > 0 and rows or nil
 end
 
--- Count required text using the same bounded character wrapping as the main
+-- Count required text using the same bounded word wrapping as the main
 -- presentation. These costs depend on the scene's question/domain, never its
 -- current selection, typed value or final page length.
 local function required_rows(V, text, width, maximum)
-  text = tostring(text):gsub('[\r\n\t]', ' ')
-  local prefix = vim.fn.strcharpart(text, 0, 4096)
-  if #prefix ~= #text then return maximum end
-  local current, rows = '', 1
-  for char in prefix:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-    if V.width(char) > width then return maximum end
-    if V.width(current .. char) > width then
-      rows, current = rows + 1, ''
-      if rows >= maximum then return maximum end
-    end
-    current = current .. char
-  end
-  return rows
+  local rows, complete = Text.wrap(tostring(text), width, V.width,
+    { max_chars = 4096, max_rows = maximum })
+  return complete and #rows or maximum
 end
 
 local function dense_height(V, data, opts, model, width, border, maximum)
@@ -173,15 +158,16 @@ local function entries(data, opts)
   if type(diagnostic) == 'table' then
     local full = diagnostic.full_message
     if type(full) ~= 'string' and type(diagnostic.lines) == 'table' then full = table.concat(diagnostic.lines, '\n') end
-    add(full or diagnostic.message, 'error')
+    add(full or diagnostic.message, diagnostic.severity == 'warning' and 'warning'
+      or diagnostic.severity == 'info' and 'normal' or 'error')
   end
   if not diagnostic or data.message ~= diagnostic.message then add(data.message, data.message_role == 'normal' and 'normal' or 'warning') end
   add(data.error, 'error')
   if details then
     if details.reason and details.reason ~= data.message then add('Unavailable: ' .. details.reason, 'warning') end
     if info.details then
-      add((details.kind or 'action') .. ' · ' .. (details.source or 'registered'))
-      add('Target: ' .. (details.target or 'current buffer'), 'normal')
+      add(details.kind and details.source and details.kind .. ' · ' .. details.source or details.kind or details.source)
+      if details.target then add('Target: ' .. details.target, 'normal') end
       add(details.description, 'normal')
     end
   end
@@ -263,7 +249,10 @@ function M.prepare(V, view, data, opts)
   end
   if not separate then
     if data.diagnostic and not data.message and not data.error then
-      local inline = vim.tbl_extend('force', {}, data, { error = data.diagnostic.message })
+      local condition = data.diagnostic.severity == 'warning' or data.diagnostic.severity == 'info'
+      local inline = vim.tbl_extend('force', {}, data, condition
+        and { message = data.diagnostic.message, message_role = data.diagnostic.severity == 'info' and 'normal' or 'warning' }
+        or { error = data.diagnostic.message })
       return inline, effective
     end
     return data, effective
@@ -306,21 +295,10 @@ local function wrap(V, records, width, groups)
         lines[#lines + 1], roles[#roles + 1] = text, spans
       end
     else
-      local current, chars = '', record.text
       local group = role_group(record.role, groups)
-      local function emit()
-        lines[#lines + 1], roles[#roles + 1] = current, group
-        current = ''
-      end
-      for char in chars:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-        if #lines >= 512 then truncated = true; break end
-        if V.width(current .. char) > width then
-          if current ~= '' then emit() end
-          if V.width(char) > width then char = V.clip(char, width) end
-        end
-        current = current .. char
-      end
-      if #lines < 512 then emit() elseif current ~= '' then truncated = true end
+      local wrapped, complete = Text.wrap(record.text, width, V.width, { max_rows = 512 - #lines })
+      for _, text in ipairs(wrapped) do lines[#lines + 1], roles[#roles + 1] = text, group end
+      truncated = truncated or not complete
     end
     if #lines >= 512 then
       truncated = truncated or record_index < #records

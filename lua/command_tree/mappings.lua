@@ -4,9 +4,10 @@ local M = { trigger_desc = "CommandTree: prefix" }
 function M.list(mode, buf)
   local merged = {}
   local Entry = require("command_tree.entry")
+  local EditorKeys = require('command_tree.editor_keys')
   for _, source in ipairs({ vim.api.nvim_get_keymap(mode), vim.api.nvim_buf_get_keymap(buf, mode) }) do
     for _, map in ipairs(source) do
-      if not Entry.is_owned(map) then merged[table.concat(K.tokens(map.lhs))] = map end
+      if not Entry.is_owned(map) and not EditorKeys.is_owned(map) then merged[table.concat(K.tokens(map.lhs))] = map end
     end
   end
   for id, map in pairs(Entry.list(mode, buf)) do

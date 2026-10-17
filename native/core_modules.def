@@ -2,6 +2,7 @@
 CE_CORE_MODULE("command_environment.core.util", "command_environment/core/util.lua")
 CE_CORE_MODULE("command_environment.core.index", "command_environment/core/index.lua")
 CE_CORE_MODULE("command_environment.core.arguments", "command_environment/core/arguments.lua")
+CE_CORE_MODULE("command_environment.core.invocation", "command_environment/core/invocation.lua")
 CE_CORE_MODULE("command_environment.core.command_descriptor", "command_environment/core/command_descriptor.lua")
 CE_CORE_MODULE("command_environment.core.navigation", "command_environment/core/navigation.lua")
 CE_CORE_MODULE("command_environment.core.operation", "command_environment/core/operation.lua")

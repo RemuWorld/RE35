@@ -78,27 +78,6 @@ function M.new(services)
   self.input_history = {}
   self.drafts = require("command_tree.drafts").new()
 
-  function self:clear_preview()
-    local state = self.active
-    if state and state.preview_restore_failed then
-      local record = Feedback.current(state)
-      state.message = record and record.message or 'Preview restoration failed; close and reopen this command'
-      return false, state.message
-    end
-    if state and state.preview_cleanup then
-      local cleanup = state.preview_cleanup
-      state.preview_cleanup = nil
-      local ok, err = pcall(cleanup)
-      if not ok then
-        state.preview_restore_failed = true
-        self:record_feedback('Restore preview failed; close and reopen this command', err)
-        vim.notify(state.message, vim.log.levels.ERROR, { title = "Command Environment" })
-        return false, state.message
-      end
-    end
-    return true
-  end
-
   function self:results()
     local state = self.active
     local ids = state.filter == "recent" and self.usage:recent() or state.filter == "favorites" and self.usage:favorites() or nil
@@ -145,6 +124,7 @@ function M.new(services)
   function self:inspect()
     local state, command = self.active, self:selected_command()
     if self:inspect_feedback() then return end
+    if self:inspect_input_status() then return end
     if state.mode == 'input' or state.mode == 'review' then state.message = 'No diagnostic to inspect for this form'; return end
     if not command then state.message = "Select a command with ↑/↓ or search before opening details"; return end
     self:push_mode("inspect", { inspected_id = command.id })
@@ -330,7 +310,8 @@ function M.new(services)
           state.feedback_offset = math.max(1, math.min(state.feedback_rows or 1, (state.feedback_offset or 1) + delta))
         end
       end
-      if key == '<C-c>' or key == self.options.keys.close then self:close()
+      if key == '<C-c>' then self:close()
+      elseif key == self.options.keys.close then self:leave()
       elseif key == '<Esc>' then self:back()
       elseif key == '<Down>' or key == '<C-n>' or key == 'j' then
         scroll(1)
@@ -357,7 +338,7 @@ function M.new(services)
       end
     elseif key == "<C-c>" or key == self.options.keys.close then
       local ctx = state.ctx
-      self:close()
+      if key == '<C-c>' then self:close() else self:leave() end
       if ctx.mode == "o" then vim.api.nvim_feedkeys(K.raw("<Esc>"), "ni", false) end
     elseif state.mode == "keymaps" and (key == self.options.keys.detail or key == "<F1>") and not guide_owns_key(state, key) then self:cycle_density()
     elseif (key == self.options.keys.detail and not shortcut_input and state.mode ~= "keymaps" and state.mode ~= "search" and state.mode ~= "words" and (state.mode ~= "input" or (state.input.choices and not state.input.filtering))) or (key == "<F1>" and state.mode ~= "keymaps") then self:cycle_density()
@@ -421,6 +402,8 @@ function M.new(services)
         self:accept_input(false)
       elseif key == "<C-s>" and not input.callback then self:accept_input(true)
       elseif input.choices then
+        if key == '<Down>' or key == '<C-n>' or key == '<Up>' or key == '<C-p>' or page_direction
+          or not input.filtering and (key == 'j' or key == 'k') then input.choice_touched = true end
         if key == "<Down>" or key == "<C-n>" or (not input.filtering and key == "j") then input.selected = Lists.move(input.selected, #input.choices, 1, self.options.navigation)
         elseif key == "<Up>" or key == "<C-p>" or (not input.filtering and key == "k") then input.selected = Lists.move(input.selected, #input.choices, -1, self.options.navigation)
         elseif page_direction then input.selected = page_selection(state, input.selected, #input.choices, page_direction)
@@ -434,7 +417,7 @@ function M.new(services)
           end
         elseif input.filtering then
           if key == "<C-v>" then state.literal = true
-          else input.filter, input.filter_cursor = Text.edit(input.filter, input.filter_cursor, key, raw); self:filter_choices() end
+          else input.filter, input.filter_cursor = Text.edit(input.filter, input.filter_cursor, key, raw); self:filter_choices(false) end
         end
         self:preview_input()
       elseif key == "<C-v>" then state.literal = true
@@ -562,7 +545,9 @@ function M.new(services)
 
   function self:bind_workspace(state)
     local attachment = state.input_attachment
-    local function owns() return self:is_attached(state, attachment) end
+    state.workspace_binding = (state.workspace_binding or 0) + 1
+    local binding = state.workspace_binding
+    local function owns() return self:is_attached(state, attachment) and state.workspace_binding == binding end
     state.workspace_registry = self.registry
     state.workspace_execute = function(id, args, context)
       if not owns() then return false, 'Workspace surface is no longer attached' end
@@ -706,7 +691,7 @@ function M.new(services)
       if not cleaned then return nil, 'Previous surface cleanup is incomplete: ' .. tostring(why) end
     end
     if self.active then
-      local closed, why = self:close()
+      local closed, why = self:leave()
       if not closed then return nil, why end
       return
     end
@@ -753,6 +738,9 @@ function M.new(services)
 
   local handle = self.handle
   function self:handle(key, raw)
+    if self.active and self.active.mode == 'input' and self.active.input and self.active.input.choices_dirty then
+      self:refresh_input_choices()
+    end
     local ok, err = xpcall(function() handle(self, key, raw) end, debug.traceback)
     if not ok and self.active then
       self:record_feedback('Interaction', err)

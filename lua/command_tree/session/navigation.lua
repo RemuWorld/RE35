@@ -112,7 +112,7 @@ function M.attach(self)
     if frame then
       restore(state, frame)
       if state.mode == "workspace" then V.close(state.view) end
-    else self:close() end
+    else self:leave() end
   end
 
   function self:workspace_choices()
@@ -132,7 +132,7 @@ function M.attach(self)
     if definition and definition.destination == 'editor' then
       local state = self.active
       if not state or not K.valid(state.ctx) then return false, 'Original editor window is no longer available' end
-      return self:suspend()
+      return self:leave()
     end
     local state, origin = self.active, snapshot(self.active)
     local frame, err, pushed = self.workspaces:push(state, id, options)
@@ -156,7 +156,15 @@ function M.attach(self)
       local record = state.feedback_inspection
       state.feedback_inspection = nil
       self:pop_mode(true)
-      if self.active == state then state.message = record and record.message end
+      if self.active == state then
+        if record and record.phase == 'Input details' then self:clear_feedback('Input details'); state.message = nil
+        else state.message = record and record.message end
+      end
+      return true
+    end
+    if state.mode == 'input' and state.input.filtering then
+      state.input.filtering = false
+      self:preview_input()
       return true
     end
     if not self:clear_preview() then return false, state.message end
@@ -207,9 +215,6 @@ function M.attach(self)
       local input, field = state.input, state.input.command.arguments[state.input.index]
       input.drafts[field.name] = input.choices and field_value(input) or input.text
       state.mode, input.editing_review = "review", nil
-    elseif state.mode == "input" and state.input.filtering then
-      state.input.filtering = false
-      self:preview_input()
     elseif state.mode == "input" and state.input.callback then
       local callback = state.input.callback
       state.input.cleanup()
@@ -227,6 +232,7 @@ function M.attach(self)
     else
       if state.mode == "input" then
         local input = state.input
+        self:release_input_choices(input)
         state.input = nil
         if input.done then pcall(input.done, false, "Cancelled") end
       end

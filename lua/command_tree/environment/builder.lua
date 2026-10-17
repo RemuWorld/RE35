@@ -26,10 +26,13 @@ local function prepare_environment(opts, pending)
   opts = opts or {}
   assert(type(opts) == "table", "Command Environment options must be a table")
   local options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
-  for _, key in ipairs({ "triggers", "commands", "bindings", "auto_modes", "extensions" }) do if opts[key] then options[key] = vim.deepcopy(opts[key]) end end
+  for _, key in ipairs({ "triggers", "commands", "bindings", "auto_modes", "extensions", "editor_keys" }) do if opts[key] then options[key] = vim.deepcopy(opts[key]) end end
   if opts.builtins ~= nil then options.providers.native = opts.builtins end
   options.builtins = options.providers.native
   validate_options(options)
+  -- Freeze the installed boundary as well as editing shortcuts. Changing a
+  -- leader later must not move refresh/cleanup to a different mapping slot.
+  options.open_key = table.concat(K.tokens(K.raw(options.open_key), true))
   -- Validate legacy settings but never use them to claim normal editing keys.
   options.auto, options.operator_help, options.triggers, options.auto_modes = false, false, {}, {}
   assert(type(options.profile) == "table", "profile must be a table")
@@ -238,6 +241,8 @@ local function prepare_environment(opts, pending)
   env.session = require("command_tree.session").new({ options = options, registry = registry, usage = usage,
     workspaces = workspaces, preferences = preferences, executor = env.executor, triggers = T, project_recipes = env.project_recipes,
     select_presentation = select_presentation })
+  local EditorKeys = require('command_tree.editor_keys')
+  EditorKeys.check(EditorKeys.validate(options.editor_keys, options.open_key))
   return env
 end
 local function prepare(opts)

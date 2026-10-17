@@ -51,7 +51,7 @@ function M.register(registry, options)
     provider = 'builtin', type = 'workspace', workspace = 'help', path = { 's', 'g' } })
   registry:register({ id = 'help.integrations', name = 'Integration diagnostics', description = 'Read-only status for this source; nothing is installed or executed',
     provider = 'builtin', type = 'workspace', workspace = 'help', workspace_options = { section = 'integrations' }, path = { 's', 'v' } })
-  registry:register({ id = 'workspace.editor', name = 'Return to editor', description = 'Suspend command navigation and return to Neovim; leave an active workspace first',
+  registry:register({ id = 'workspace.editor', name = 'Return to editor', description = 'Return to native editing; resume safe navigation at the next entry',
     provider = 'builtin', type = 'workspace', workspace = 'editor' })
 end
 local function items(frame)
@@ -77,7 +77,7 @@ local function items(frame)
     row('storage', 'Understand saved state', 'Settings edits are Drafts until Apply. Saved changes restore at startup; memory-only changes last for this session.'),
     row('integrations', 'Integration diagnostics', 'Check which features are built in and which need your configured plugin, executable or language server.'),
     row('persistence', 'Storage status', 'Inspect the actual profile, theme and history storage state; previewing a theme does not save it.'),
-    row('editor', 'Return to editor', 'Workspaces > Editor keeps navigation for the next entry. Close ends navigation and starts fresh next time. Neither action cancels submitted Tasks; Neovim owns editing.'),
+    row('editor', 'Return to editor', 'The entry key or Workspaces > Editor keeps safe navigation for the next entry. Ctrl-c resets navigation. Workspace resources close; unapplied workspace edits are not retained. Neither action cancels submitted Tasks.'),
   }
 end
 function M.definition()

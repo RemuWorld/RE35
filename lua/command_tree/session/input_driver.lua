@@ -20,10 +20,14 @@ end
 
 function M.detach(owner, state)
   local attachment = state and state.input_attachment
-  if not attachment then return end
+  if not attachment then
+    if owner.release_all_input_choices then owner:release_all_input_choices(state) end
+    return
+  end
   -- Invalidate before restoring hooks: callbacks invoked during cleanup already
   -- belong to an expired attachment, including streamed paste fragments.
   attachment.detached = true
+  if owner.release_all_input_choices then owner:release_all_input_choices(state) end
   attachments[attachment] = nil
   state.input_attachment, state.paste_text = nil, nil
   if vim.paste == attachment.paste_handler then vim.paste = attachment.original_paste end

@@ -3,6 +3,7 @@
 local M = {}
 local ns = vim.api.nvim_create_namespace('CommandTreeGuide')
 local Keys = require('command_tree.session.key_guide')
+local Text = require('command_tree.view.text_layout')
 local guide_width, padding = 30, 1
 
 local function close(V, view)
@@ -60,23 +61,7 @@ end
 -- Wrap descriptions by display cells, retaining every character of long words
 -- and Unicode labels. Key chords never pass through this wrapping function.
 local function wrap_label(V, label, width)
-  local rows, current = {}, ''
-  local function emit()
-    rows[#rows + 1], current = current, ''
-  end
-  for word in label:gmatch('%S+') do
-    local separator = current ~= '' and ' ' or ''
-    if V.width(current .. separator .. word) <= width then current = current .. separator .. word
-    else
-      if current ~= '' then emit() end
-      for char in word:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-        if V.width(current .. char) > width then emit() end
-        current = current .. char
-      end
-    end
-  end
-  if current ~= '' then emit() end
-  return rows
+  return Text.wrap(label, width, V.width)
 end
 
 local function hint_rows(V, source, scroll, groups)

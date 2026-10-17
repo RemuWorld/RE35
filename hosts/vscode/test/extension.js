@@ -20,6 +20,15 @@ async function run() {
     const api = await extension.activate();
     service = new api.Host({ helperPath: process.env.RE35_TEST_HELPER, luaRuntime: process.env.RE35_TEST_LUA_RUNTIME,
       corePath: process.env.RE35_TEST_CORE, processHelper: process.env.RE35_TEST_PROCESS_HELPER || undefined });
+    if (process.env.RE35_TEST_INVOCATION_ONLY === '1') {
+      const invocation = await require('./invocation').run();
+      const invocationHost = await require('./invocation-host').run({ api, options: service.options });
+      const report = { passed: true, checks: invocation.checks + invocationHost.checks, invocation, invocation_host: invocationHost,
+        vscode: vscode.version, host: 'actual VS Code Extension Development Host', physical_gestures_measured: false };
+      await fs.writeFile(reportPath, JSON.stringify(report, null, 2) + '\n');
+      console.log('RE35_VSCODE_PASS:' + JSON.stringify(report));
+      return;
+    }
     const [firstCore, joinedCore] = await Promise.all([service.core(), service.core()]);
     eq(firstCore, joinedCore);
     eq((await firstCore.call('get', { id: 'edit.replace_literal' })).id, 'edit.replace_literal');
@@ -220,7 +229,11 @@ async function run() {
     checks += presentationEditorUi.checks;
     const presentationInspection = await require('./presentation-inspection').run({ api, root, options: service.options, nativeApi: vscode });
     checks += presentationInspection.checks;
-    const report = { passed: true, checks, task_execution: taskExecution, recipe_execution: recipeExecution, recipe_sequence: recipeSequence, results_search: resultsSearch, task_recovery: taskRecovery, recovery_ui: recoveryUi, presentation,
+    const invocation = await require('./invocation').run();
+    checks += invocation.checks;
+    const invocationHost = await require('./invocation-host').run({ api, options: service.options });
+    checks += invocationHost.checks;
+    const report = { passed: true, checks, invocation, invocation_host: invocationHost, task_execution: taskExecution, recipe_execution: recipeExecution, recipe_sequence: recipeSequence, results_search: resultsSearch, task_recovery: taskRecovery, recovery_ui: recoveryUi, presentation,
       presentation_native: presentationNative, presentation_facts: presentationFacts,
       presentation_scenes: presentationScenes, presentation_live: presentationLive,
       presentation_editor: presentationEditor, presentation_editor_ui: presentationEditorUi,

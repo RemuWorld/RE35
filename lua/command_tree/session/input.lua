@@ -47,6 +47,8 @@ function M.attach(self, dispatch_submission)
     -- Preview cleanup must finish before a new appearance draft can take over.
     if not self:clear_preview() or not current_control(state, input, command, ctx, attachment, index) then return true end
     input.args = vim.tbl_extend('force', {}, input.args, patch)
+    self:refresh_input_choices(false)
+    if not current_control(state, input, command, ctx, attachment, index) then return true end
     self:preview_input()
     return true
   end
@@ -60,6 +62,7 @@ function M.attach(self, dispatch_submission)
     for _, name in ipairs({ 'label', 'help', 'description' }) do
       if type(status[name]) == 'string' then out[name] = vim.fn.strcharpart(status[name], 0, 1024) end
     end
+    out.inspectable = status.inspectable == true
     return out
   end
   local function refresh_presentation(state, input)
@@ -89,35 +92,13 @@ function M.attach(self, dispatch_submission)
     end
     return true
   end
-  function self:preview_input()
-    local state = self.active
-    if not state or not state.input or not self:clear_preview() then return end
-    local command, input = state.input.command, state.input
-    local ctx = input_context(state)
-    if not K.valid(ctx) then state.message = "Input target changed; reopen the command"; return end
-    if input.callback then
-      if type(input.preview) == "function" then
-        local ok, cleanup = pcall(vim.api.nvim_win_call, ctx.win, function() return input.preview(field_value(input), ctx) end)
-        if ok then
-          self:clear_feedback('Preview')
-          if type(cleanup) == 'function' then state.preview_cleanup = cleanup end
-        else self:record_feedback('Preview', cleanup, command) end
-      end
-      return
-    end
-    if type(command.preview) ~= "function" then return end
-    local args = vim.deepcopy(input.args)
-    local field = command.arguments[input.index]
-    args[field.name] = field_value(input)
-    local ok, cleanup = pcall(vim.api.nvim_win_call, ctx.win, function() return command.preview(ctx, args) end)
-    if ok then
-      self:clear_feedback('Preview')
-      if type(cleanup) == 'function' then state.preview_cleanup = cleanup end
-    else self:record_feedback('Preview', cleanup, command) end
-  end
+  require('command_tree.session.preview').attach(self, field_value, input_context)
+  require('command_tree.session.choice_source').attach(self, current_control, control_call, input_context)
 
   function self:input_field()
     local state, input = self.active, self.active.input
+    self:release_input_choices(input)
+    if self.active ~= state or state.input ~= input or input.retired or not self:is_attached(state, state.input_attachment) then return end
     local ctx, attachment, index = input_context(state), state.input_attachment, input.index
     assert(K.valid(ctx), "Input target changed; reopen the command")
     if not input.callback and not input.ui_initialized then
@@ -130,25 +111,38 @@ function M.attach(self, dispatch_submission)
     local value = input.drafts[field.name]
     if value == nil then value = input.args[field.name] end
     if value == nil then value = A.default(field, ctx, input.args) end
+    input.preferred_choice, input.choice_touched = value, nil
+    input.choice_domain = nil
     input.text, input.selected, input.choices = value == nil and "" or tostring(value), 1, nil
     input.all_choices, input.filtering, input.filter, input.filter_cursor, input.completion = nil, false, "", 0, nil
+    input.filtered_query, input.filtered_source = nil, nil
     input.history_index, input.history_draft = nil, nil
     input.checked = field.kind == "multiselect" and vim.deepcopy(value or {}) or nil
     input.cursor = vim.fn.strchars(input.text)
     if field.kind == "select" or field.kind == "boolean" or field.kind == "multiselect" then
-      input.choices = A.items(field, ctx, input.args)
+      input.choices = self:load_input_choices()
+      if not input.choices then return end
       input.all_choices = input.choices
-      if #input.choices == 0 then state.message = field.empty_message or "No choices are available"; return end
       for i, item in ipairs(input.choices) do if vim.deep_equal(A.value(item), value) then input.selected = i end end
+      self:subscribe_input_choices()
+      if not input.callback and not current_control(state, input, input.command, ctx, attachment, index) then return end
+      if #input.choices == 0 and not (input.command.input_ui and input.command.input_ui.subscribe) then
+        state.message = field.empty_message or "No choices are available"; return
+      end
     end
     state.message = nil
     self:preview_input()
   end
 
-  function self:filter_choices()
+  function self:filter_choices(preview)
     local input = self.active.input
     local selected = input.choices and input.choices[input.selected]
     local needle = vim.fn.tolower(input.filter or "")
+    if input.filtered_query ~= nil and needle ~= input.filtered_query then input.choice_touched = true end
+    if input.filtered_query == needle and input.filtered_source == input.all_choices then
+      if preview ~= false then self:preview_input() end
+      return
+    end
     input.choices = vim.tbl_filter(function(item) return vim.fn.tolower(A.label(item)):find(needle, 1, true) ~= nil end, input.all_choices or {})
     input.selected = math.max(1, math.min(input.selected or 1, #input.choices))
     if selected then
@@ -156,7 +150,8 @@ function M.attach(self, dispatch_submission)
         if vim.deep_equal(A.value(item), A.value(selected)) then input.selected = index; break end
       end
     end
-    self:preview_input()
+    input.filtered_query, input.filtered_source = needle, input.all_choices
+    if preview ~= false then self:preview_input() end
   end
 
   function self:request_field(field, options, callback, context)
@@ -176,6 +171,7 @@ function M.attach(self, dispatch_submission)
       input.callback = nil
       if self:is_attached(state, attachment) and state.input == input then
         self:clear_preview()
+        self:release_input_choices(input)
         self:pop_mode(true)
         state.input = origin
       end
@@ -249,12 +245,14 @@ function M.attach(self, dispatch_submission)
       input.done = nil
       if value == false then
         self.drafts:save(input.command, input, ctx)
+        self:release_input_choices(input)
         state.input = nil
         self:pop_mode()
         if done then pcall(done, false, 'Cancelled') end
       else dispatch_submission(input, done) end
     elseif input.editing_review or (input.index == #input.command.arguments and #input.command.arguments >= 2) then
       if not self:clear_preview() then return end
+      self:release_input_choices(input)
       input.review_selected = input.editing_review and input.index or #input.command.arguments + 1
       input.editing_review, state.mode = nil, "review"
       state.message = nil

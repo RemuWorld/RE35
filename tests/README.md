@@ -58,10 +58,16 @@ interaction checks or performance measurements used for a release.
 
 | Current fixture | Checks |
 | --- | --- |
+| `test_invocation.lua` / `test_editor_invocation.lua` | Editor-independent bounded intent/wire agreement, same native dispatcher, fresh context, retained navigation, unavailable and review refusal |
+| `test_editor_keys.lua` / `test_session_return.lua` | Owned editing maps, conflicts/rollback/cleanup, actual Insert/Visual callbacks and predictable editor-return/reset behavior |
 | `test_theme_persistence.lua` / `test_theme_startup.lua` | Actual save/rollback failures, strict host-local state, confirmed theme restoration across fresh editor processes, custom ownership and disabled/stale startup hooks |
 | `test_theme_appearance.lua` | Native theme Light/Dark and preview controls across densities, exact confirmed persistence, cancellation/preview failure/storage failure and legacy adapter behavior |
+| `test_theme_catalog.lua` | Separate-worker Light/Dark observations, cache reuse/invalidation, removed themes, bounded failures and unchanged editor state |
+| `test_condition_feedback.lua` | Concise expected conditions, full detail inspection/return, severity and description-only metadata across densities |
+| `test_text_layout.lua` | Word/eojul boundaries, bounded Unicode emergency wrapping, actual required-fact rendering and fresh resize admission |
 | `test_navigation_feedback.lua` | Shared list wrapping, option-off clamping, full error inspection/return, restoration failure refusal, independent detail scrolling and native Editor return |
 | `test_fixed_panels.lua` | Stable main geometry, independent bounded details, legacy/preset and three-density behavior, tiny critical-scene refusal and complete window cleanup |
+| `test_window_updates.lua` | Unchanged panel content/options avoid redundant writes; externally modified content, options and frame roles are repaired from live state |
 | `test_view_plan.lua` | Shared fresh review/render page budgets, fixed/dynamic geometry, Unicode multi-page facts and narrow resize refusal/recovery without planning-time views |
 | `test_view_model.lua` | One renderer for local/preset input, historical large local bounds and row ceilings, preserved preferences and fresh scene/resize normalization |
 | `test_panel_plan.lua` | Pure optional guide placement, exact review/page agreement, narrow fallback, failed allocation cleanup and conservative fresh admission |
@@ -129,7 +135,10 @@ included in the default Neovim-only runner.
 
 The opt-in [VS Code integration runner](acceptance/run_vscode_host.py) captures
 an immutable source/helper snapshot and executes actual editor APIs with isolated
-settings/workspace files. [Resource measurement](acceptance/run_vscode_resources.py)
+settings/workspace files. `--invocation-only` selects the direct semantic command
+cases, including reviewed replacement and source changes during validation.
+It does not run the remaining project/presentation integration cases.
+[Resource measurement](acceptance/run_vscode_resources.py)
 uses the same actual host with fixed conditions and comparison budgets; see
 [VS Code resource comparison](#vs-code-resource-comparison). Physical QuickPick
 gestures and appearance remain owner observations. The standalone Node

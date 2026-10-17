@@ -8,15 +8,27 @@ local CE, Profile = require('re35'), require('command_tree.profile')
 local folder = H.tempdir('theme-appearance')
 local runtime = folder .. '/runtime'
 vim.fn.mkdir(runtime .. '/colors', 'p')
-vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_adaptive'" }, runtime .. '/colors/re35_fixture_adaptive.lua')
-vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_dark_only'", "vim.o.background = 'dark'" },
+local adaptive_palette = "vim.api.nvim_set_hl(0, 'Normal', { bg = vim.o.background == 'light' and '#eeeeee' or '#222222' })"
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_adaptive'", adaptive_palette }, runtime .. '/colors/re35_fixture_adaptive.lua')
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_dark_only'", "vim.o.background = 'dark'",
+  "vim.api.nvim_set_hl(0, 'Normal', { bg = '#222222' })" },
   runtime .. '/colors/re35_fixture_dark_only.lua')
-vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_light_only'", "vim.o.background = 'light'" },
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_light_only'", "vim.o.background = 'light'",
+  "vim.api.nvim_set_hl(0, 'Normal', { bg = '#eeeeee' })" },
   runtime .. '/colors/re35_fixture_light_only.lua')
-vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_adaptive'" }, runtime .. '/colors/re35_fixture_alias.lua')
-vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_broken'", "vim.o.background = 'light'",
-  "error('appearance fixture preview failure')" }, runtime .. '/colors/re35_fixture_broken.lua')
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_adaptive'", adaptive_palette }, runtime .. '/colors/re35_fixture_alias.lua')
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_broken'", adaptive_palette }, runtime .. '/colors/re35_fixture_broken.lua')
 vim.opt.runtimepath:prepend(runtime)
+-- Keep this UI fixture's discovery domain finite. Actual built-in sources and
+-- worker processes are still used; catalog coverage tests full cache behavior.
+local completion = vim.fn.getcompletion
+vim.fn.getcompletion = function(lead, kind, ...)
+  local values = completion(lead, kind, ...)
+  if kind ~= 'color' then return values end
+  return vim.tbl_filter(function(name)
+    return name == 'default' or name == 'desert' or name == 'peachpuff' or name:match('^re35_fixture_') ~= nil
+  end, values)
+end
 vim.o.columns, vim.o.lines = 200, 60
 local function keys(value) for _, key in ipairs(K.tokens(value)) do session:handle(key) end end
 local function saved(path) return table.concat(vim.fn.readfile(path), '\n') end
@@ -36,13 +48,24 @@ local function setup(density, path, integration, persist)
     providers = { builtin = false, plugins = true, lsp = false, runner = false, native = false, keymaps = false, ex = false },
     window = { layout = 'fixed', width = 70, max_height = 16, icons = false } })
 end
+local function open_theme()
+  H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+  local adapter = session.options.integrations.theme
+  if adapter.builtin then
+    H.ok(vim.wait(20000, function()
+      local light, dark = adapter.classification_status('light'), adapter.classification_status('dark')
+      return light.initialized and light.pending == 0 and dark.pending == 0
+    end, 10), 'The actual theme picker receives classified choices')
+    session:refresh_input_choices(); session:draw()
+  end
+end
 
 for _, density in ipairs({ 'full', 'compact', 'minimal' }) do
   local path = folder .. '/' .. density .. '.json'
   vim.cmd.colorscheme('default'); vim.o.background = 'dark'
   setup(density, path)
   local operations = #CE.operations()
-  H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+  open_theme()
   local input, state = session.active.input, session.active
   H.eq(1, #input.command.arguments, density .. ': one Theme choice preserves the direct picker flow')
   H.eq('dark', input.args.background, density .. ': draft starts with actual appearance')
@@ -83,6 +106,8 @@ for _, density in ipairs({ 'full', 'compact', 'minimal' }) do
   H.eq(false, input.args.preview, density .. ': auto preview can be disabled without leaving the list')
   H.eq('default', vim.g.colors_name); H.eq('dark', vim.o.background, density .. ': disabling preview restores the original pair')
   keys('/re35_fixture_adaptive<Esc>')
+  H.ok(input.choices[input.selected], 'Adaptive fixture must be classified: '
+    .. vim.inspect(session.options.integrations.theme.classification_status('light')))
   H.eq('re35_fixture_adaptive', input.choices[input.selected].value, density .. ': filtered choice is selected')
   H.eq('default', vim.g.colors_name, density .. ': navigation with preview off has no theme side effect')
   H.eq('dark', vim.o.background)
@@ -97,7 +122,7 @@ for _, density in ipairs({ 'full', 'compact', 'minimal' }) do
   CE.close()
   vim.o.background = 'dark'
   H.eq(persisted, saved(path), density .. ': native background changes do not silently rewrite confirmed state')
-  H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+  open_theme()
   H.eq('dark', session.active.input.args.background, density .. ': new picker reflects the actual native appearance')
   keys('<C-b><Esc>')
   H.eq('re35_fixture_adaptive', vim.g.colors_name); H.eq('dark', vim.o.background, density .. ': Back restores both original values')
@@ -133,7 +158,11 @@ H.ok(CE.execute('ui.theme', { theme = 'default' }, { interactive = false }), 'Ex
 H.eq('dark', H.ok(State.read(path)).background, 'Theme-only callers confirm actual native appearance')
 
 local confirmed = saved(path)
-H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+open_theme()
+-- A previously classified installed source can fail later. Exercise actual
+-- preview rollback without deliberately listing a known-broken theme.
+vim.fn.writefile({ "vim.g.colors_name = 're35_fixture_broken'", "vim.o.background = 'light'",
+  "error('appearance fixture preview failure')" }, runtime .. '/colors/re35_fixture_broken.lua')
 keys('/re35_fixture_broken<Esc>')
 local failure = require('command_tree.session.feedback').current(session.active)
 H.ok(failure.full_message:find('appearance fixture preview failure', 1, true), 'Failed preview remains inspectable')
@@ -148,42 +177,24 @@ CE.close()
 
 -- Peachpuff is a real light-only runtime scheme. Forcing background back to
 -- dark used to clear colors_name while retaining its light palette, yet report
--- a successful dark preview/commit. Exercise the actual picker and diagnostics.
+-- a successful dark preview/commit. The classified picker now prevents that
+-- ordinary mismatch instead of presenting it as a routine preview failure.
 local peach_path = folder .. '/peachpuff.json'
 vim.cmd.colorscheme('desert'); vim.o.background = 'dark'
 setup('full', peach_path)
-H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+open_theme()
 keys('/peachpuff<Esc>')
 local peach_input, peach_state = session.active.input, session.active
-H.eq('peachpuff', peach_input.choices[peach_input.selected].value)
-H.eq('dark', peach_input.args.background, 'Failed preview retains the pending requested appearance')
-H.eq('desert', vim.g.colors_name, 'Incompatible Peachpuff preview restores the original theme identity')
-H.eq('dark', vim.o.background, 'Incompatible Peachpuff preview restores the original appearance')
-H.eq(nil, vim.uv.fs_stat(peach_path), 'Rejected Peachpuff preview never saves')
+H.eq(0, #peach_input.choices, 'Light-only Peachpuff never appears in the classified Dark list')
+H.eq('dark', peach_input.args.background)
+H.eq('desert', vim.g.colors_name, 'Excluded themes have no preview effects')
+H.eq('dark', vim.o.background)
+H.eq(nil, vim.uv.fs_stat(peach_path))
 failure = require('command_tree.session.feedback').current(peach_state)
-H.ok(failure and failure.full_message:find('selected light appearance; requested dark', 1, true),
-  'Actual Peachpuff preview exposes its incompatibility as an inspectable error')
-local mismatch_summary = failure.full_message:match('^[^\n]+')
-H.ok(mismatch_summary:find('Colorscheme peachpuff', 1, true) and not mismatch_summary:find('themes.lua', 1, true),
-  'Expected appearance mismatch starts with useful feedback instead of adapter source paths')
-H.ok(text(peach_state.view.details):find('peachpuff', 1, true), 'Peachpuff preview error is visible below the picker')
+H.eq(nil, failure, 'Ordinary Light/Dark filtering produces no mismatch warning')
 hint(peach_state.view.guide, 'Ctrl+b', 'Light/Dark')
-hint(peach_state.view.guide, 'Ctrl+h', 'Inspect error')
-keys('<C-h>')
-H.eq('feedback', session.active.mode, 'Preview mismatch opens the existing full diagnostic view')
-H.ok(session.active.feedback_inspection.full_message:find('requested dark', 1, true),
-  'Full diagnostic retains the incompatible requested appearance')
-local function requested_visible()
-  return (text(session.active.view) .. ' ' .. text(session.active.view.details)):gsub('%s+', ''):find('requesteddark', 1, true)
-end
-local diagnostic = session.active.view.details
-for _ = 1, diagnostic and diagnostic.total or 0 do
-  if requested_visible() then break end
-  require('command_tree.view').scroll_details(session.active.view, 1)
-end
-H.ok(requested_visible(), 'Complete mismatch explanation remains reachable by scrolling the diagnostic panel')
-keys('<Esc><C-b>')
-H.eq(peach_input, session.active.input, 'Inspecting the error preserves the attached picker')
+keys('<C-b>')
+H.eq(peach_input, session.active.input, 'Changing appearance refreshes the attached picker')
 H.eq('light', peach_input.args.background)
 H.eq('peachpuff', vim.g.colors_name, 'Compatible Light preview retains the real theme identity')
 H.eq('light', vim.o.background)
@@ -196,7 +207,7 @@ H.eq('peachpuff', peach_saved.theme); H.eq('light', peach_saved.background, 'Con
 local peach_confirmed = saved(peach_path)
 CE.close()
 vim.cmd.colorscheme('desert'); vim.o.background = 'dark'
-H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+open_theme()
 keys('/peachpuff<Esc><C-b>')
 H.eq('peachpuff', vim.g.colors_name); H.eq('light', vim.o.background)
 keys('<Esc>')
@@ -222,7 +233,7 @@ H.eq(incompatible_saved, saved(incompatible_path), 'Rejected startup state remai
 setup('full', path)
 vim.cmd.colorscheme('default'); vim.o.background = 'dark'
 session.drafts:forget('ui.theme', K.context().buf)
-H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+open_theme()
 keys('<C-b><C-t>')
 local write = State.write
 State.write = function() return false, 'fixture startup state denied' end
@@ -237,7 +248,7 @@ CE.close()
 vim.cmd.colorscheme('default'); vim.o.background = 'dark'
 local session_path = folder .. '/session-only.json'
 setup('minimal', session_path, nil, false)
-H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+open_theme()
 local body = table.concat(vim.api.nvim_buf_get_lines(session.active.view.buf, 0, -1, false), '\n')
 H.ok(body:find('Session only', 1, true), 'Opt-out confirmation scope is visible even in Minimal')
 keys('<C-b><CR>')
@@ -253,7 +264,7 @@ local custom = { items = function() return { 'Custom A', 'Custom B' } end, curre
   preview = function() previews = previews + 1; return function() restored = restored + 1 end end,
   commit = function(_, args) applied = vim.deepcopy(args); return true end }
 setup('full', folder .. '/custom.json', custom)
-H.ok(CE.open({ command = 'ui.theme', interactive = false }))
+open_theme()
 H.eq(nil, session.active.input.args.background)
 keys('<Down><CR>')
 H.eq('Custom B', applied.theme); H.eq(nil, applied.background); H.eq(nil, applied.preview)
@@ -261,4 +272,5 @@ H.ok(previews > 0 and restored > 0, 'Custom preview/cleanup ownership is preserv
 H.eq(nil, vim.uv.fs_stat(folder .. '/custom.json'), 'Custom adapters do not acquire builtin persistence')
 CE.close()
 vim.opt.runtimepath:remove(runtime)
+vim.fn.getcompletion = completion
 print('Theme appearance: ' .. H.checks .. ' checks passed')

@@ -2,7 +2,7 @@
   "name": "re35-desktop",
   "displayName": "RE35 Command Environment",
   "description": "Development host for shared RE35 documents, profiles and sequential project tasks.",
-  "version": "0.3.2",
+  "version": "0.4.0",
   "publisher": "RemuWorld",
   "license": "Apache-2.0",
   "engines": {
@@ -20,6 +20,7 @@
   },
   "activationEvents": [
     "onCommand:re35.open",
+    "onCommand:re35.execute",
     "onCommand:re35.searchDocument",
     "onCommand:re35.replaceLiteral",
     "onCommand:re35.results",
@@ -43,6 +44,10 @@
       {
         "command": "re35.open",
         "title": "RE35: Open Command Environment"
+      },
+      {
+        "command": "re35.execute",
+        "title": "RE35: Execute Semantic Command"
       },
       {
         "command": "re35.searchDocument",
@@ -270,6 +275,14 @@
           "description": "Shared appearance preferences. An applied portable profile overrides this collection. Native UI applies optional information; geometry, icons, decoration and colors report native fallbacks. No executable styling."
         }
       }
+    },
+    "menus": {
+      "commandPalette": [
+        {
+          "command": "re35.execute",
+          "when": "false"
+        }
+      ]
     }
   },
   "scripts": {

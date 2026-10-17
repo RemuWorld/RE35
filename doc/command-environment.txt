@@ -1,4 +1,4 @@
-*command-environment*  RE35 Command Environment 0.3.2 for Neovim
+*command-environment*  RE35 Command Environment 0.4.0 for Neovim
 
 SETUP                                                   *ce-setup*
 
@@ -25,7 +25,7 @@ sources and inconsistent replacement plans are rejected; the host owns review
 authorization and retains the reviewed arguments or plan.
 See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
 The optional VS Code host supports a subset of the Neovim environment.
-Version 0.3.2. See docs/compatibility.md for host support and known limitations.
+Version 0.4.0. See docs/compatibility.md for host support and known limitations.
 
 OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
 
@@ -57,14 +57,18 @@ NEOVIM USABILITY                                        *ce-0.2*
 theme.persist = false keeps session-only changes. Preview never saves. Supplied
 custom theme adapters retain their own storage and startup responsibility.
 See |ce-integration-theme| for theme adapter configuration.
-The builtin theme picker shows Light/Dark, automatic preview and whether Enter
-will save for startup or apply for this session. Ctrl-b switches appearance;
+The builtin theme picker shows separate Light/Dark lists, automatic preview and
+whether Enter saves for startup or applies for this session, including Minimal.
+Ctrl-b switches the appearance list;
 Ctrl-t toggles automatic preview outside filter editing. Enter confirms the
 selected theme and appearance; Esc restores both. :set background changes the
 editor only until a theme is explicitly confirmed here. Storage failures remain
 visible and do not claim a successful save.
-Fixed-appearance schemes such as peachpuff require Light. An incompatible
-appearance is rejected with restoration; Ctrl-b selects the supported appearance.
+Confirmed Light-only schemes such as peachpuff do not appear under Dark; themes
+supporting both appear in both lists. Checking fills lists asynchronously and
+reuses an unchanged classification cache. Ctrl-h explains failed/unclassified
+themes. Live appearance mismatches restore the previous pair and correct the list.
+See |ce-integration-theme| for worker scope and limitations.
 
 Single Up/Down selection wraps by default; navigation.wrap = false clamps it.
 Page/output scrolling and text editing do not wrap. The main command panel
@@ -72,27 +76,27 @@ keeps a stable footprint; details appear below it. Shift-PageUp/Shift-PageDown
 scroll details, and Ctrl-h inspects the full bounded preview/storage error.
 Back returns to the same input. Minimal keeps a small borderless entry view.
 window.layout = "dynamic" selects the prior content-sized layout.
+Descriptions and required facts wrap at words/spaced Korean units first. Only
+tokens wider than a full row split, retaining common combining/emoji sequences.
+Preflight and rendering use the same cell/row rules; this is not a complete
+Unicode language-specific line-breaking engine. Expected preview conditions
+show a short explanation; Ctrl-h opens full details. Real errors retain severity.
 
 Open Getting started with \sg, integration diagnostics with \sv, or use
-:checkhealth re35. Leave any active workspace, then select Editor in Workspaces
-to suspend command navigation and return to the native editing window. The next
-plain \ entry resumes navigation with the current editor context. Old forms and
-reviews are discarded; select the command again to restore nonsecret drafts and
-enter secrets afresh. Ctrl-c, the Close key, and require('re35').close() dispose
-the session. Submitted background tasks retain their own lifetime.
-If Editor was chosen from the workspace selector, resuming returns to that
-selector; press Esc to return to the preceding command tree.
-Ctrl-w opens Workspaces from the command tree by default. Editor keeps navigation
-for the next entry; Close resets navigation. Neither cancels submitted Tasks.
-Ordinary resumption is silent. Restoring a command's nonsecret inputs shows a
-neutral notice in its new form, where a fresh run decision is still required.
+:checkhealth re35. The entry key, root Back and Workspaces > Editor return to
+editing and preserve safe navigation for the next plain entry. Ctrl-c or
+require('re35').close() reset it. Neither cancels submitted background Tasks.
+Resume captures the current editor context; old forms and review authority are
+retired. Select a command again to restore nonsecret drafts, then enter secrets
+and confirm Apply afresh. Workspace frames/resources close and return to their
+selector; extension workspace drafts need declared scalar memory to survive.
+Apply or discard changed Settings drafts before leaving.
 
-require('re35').suspend() and require('re35').resume() expose the same
-transitions. Pass {interactive=false} to resume() for scripted control.
-state() distinguishes active, suspended and surface_attached. All active
-workspaces must be left before suspension; they are not silently discarded.
-A failed final cleanup returns false and leaves
-cleanup_pending/cleanup_error for another close() attempt, without input authority.
+require('re35').leave() / resume() expose ordinary return/resume. The older
+suspend() API remains strict and refuses active workspace stacks.
+Pass {interactive=false} to resume() for scripted control. state() distinguishes
+active, suspended and surface_attached. A failed final close retains
+cleanup_pending/cleanup_error for a retry, without live input authority.
 
 Draft, Saved, Session only and failed storage states distinguish actual
 persistence; integrations are never auto-installed.
@@ -155,17 +159,41 @@ and processes in command_tree. An optional C ABI embeds the same Lua sources
 for C++/C# console hosts; Neovim does not need a compiler, .NET or native DLL.
 See docs/portable-core.md, docs/project-recipes.md and docs/file-search.md.
 
-RE35 opens only at the explicit entry boundary (default \ in Normal/Visual).
+RE35 opens at its entry boundary (default \ in Normal/Visual) or through
+explicitly configured editor_keys. No editing shortcuts are assigned by default.
 It does not install automatic g/z/operator/leader guide triggers. Ordinary
 editor mappings outside that prefix keep their native execution behavior.
 The entry claims existing root and descendant mappings without a prefix delay;
 their originals remain available in the imported guide (ki). Disable restores
 them. Native Ex command entry (:) remains available independently.
 
+EDITOR SHORTCUTS                                        *ce-editor-keys*
+
+No ordinary editing shortcut is assigned by default. Example setup:
+>lua
+  require('re35').setup({ editor_keys = {
+    {key='<F6>', command='search.document', args={query='TODO'}, mode='n'},
+  } })
+<
+mode accepts n (default), x, i or a list of these. Global host key notation is
+separate from portable command intent. Existing exact maps require explicit
+replace=true; prefix and loaded buffer-local conflicts reject setup. Disable
+restores originals only while RE35 still owns their slot. Later replacements
+and buffer-local shadows are respected. editor_keys() / :checkhealth re35 show
+current ownership. No arbitrary key replay or editing grammar is installed.
+
+invoke({command='search.document',args={query='TODO'}}) uses the same dispatcher
+as tree entry. It requires exact stable IDs, not aliases or runtime map/Ex IDs.
+Missing fields open existing input; unknown arguments are refused. Availability,
+source validation and required Apply reviews still apply. Finish/leave an active
+surface before direct editor invocation. VS Code uses the same data envelope via
+re35.execute, with native keybindings and its documented supported commands.
+
 KEYS                                                    *ce-keys*
 
-  \                 Open / close the command environment.
-  Esc/Left/BS       Back one level; close at root, outside editable fields.
+  \                 Open / return to editing; next entry resumes navigation.
+  Ctrl-c            Reset command navigation.
+  Esc/Left/BS       Back one level; return to editing at root, outside text fields.
   /                 Search commands; inside a picker, filter its choices.
   ?                 Cycle Full / Compact / Minimal in navigation/workspaces.
   F1                Same density cycle, including editable fields.
@@ -356,7 +384,7 @@ preview(ctx,args) may return a cleanup function. Preview runs after input change
 Cleanup precedes the next preview, commit or close. Commit must apply the final
 change itself. Preview cleanup failures are reported; arbitrary extension side
 effects are the extension's responsibility. A failed command keeps its inputs
-and navigation context. Successful ordinary commands close a tree session;
+and navigation context. Successful ordinary commands return to editing and keep safe navigation;
 commands invoked from a workspace can return to that workspace. Multiple
 declared fields have an Edit/Run review before dispatch.
 
@@ -378,7 +406,8 @@ Hooks receive (frame,ctx,session,options), except handle receives
 UI views/timers belong to frame lifecycle; jobs belong to their backend.
 Pushing suspends the previous frame; Esc pops and resumes it; closing leaves
 all frames without resuming covered ones. Hook failures are isolated/reported.
-These frame hooks cover stacking; Editor suspension requires leaving all frames.
+These frame hooks cover stacking; ordinary Editor return closes owned frames.
+The legacy suspend() API still requires leaving all frames first.
 Reopening the current workspace does not duplicate its stack entry. A workspace
 chosen from the selector returns to that selector on Back, retaining selection
 and filter; leaving the selector restores its previous caller.
@@ -410,7 +439,7 @@ is rejected. A selected sequence is remembered per buffer in bounded memory,
 but reopening History never automatically restores a state. The list refreshes
 after restore. history.timeline_stay_open=false exits Timeline after restore;
 history.position overrides placement. require('re35').version is
-'0.3.2'.
+'0.4.0'.
 Tasks uses a theme color; j/k selects, Enter details, Esc returns, x/Ctrl-x
 cancels explicitly; r reruns a completed operation, s returns to its source.
 For failed recipes, c opens owned source Results or relevant step Settings.

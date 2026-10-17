@@ -33,6 +33,20 @@ Neovim's project-name `require("re35")`
 facade and legacy `require("command_tree")` expose the same host API; portable
 Lua modules retain the `command_environment.core` namespace.
 
+## Direct command intent
+
+`core.invocation.validate({command="search.document", args={query="TODO"}})`
+validates and copies data; it does not select, authorize or execute a command.
+The optional wire operation is `invocation_validate` with `{invocation: ...}`.
+Both hosts use this envelope before their existing command flow. Exact stable
+IDs are independent of tree paths; host key notation stays outside the envelope.
+The bound is 64 KiB encoded JSON, depth 16 and 2048 data items; arguments must be
+an object containing finite JSON-compatible data. Unknown invocation fields,
+callbacks, host objects and runtime map/Ex IDs are refused. A host then validates
+supported command arguments, captures its current source, and owns capability,
+review and execution checks. Missing inputs may open the existing form.
+Unsupported IDs remain unavailable rather than becoming raw key playback.
+
 ## Build and run
 
 With a C11/C++17 toolchain, run `cmake -S . -B build`, then `cmake --build build`. On Linux the loader uses `dlopen`; Windows uses UTF-8 to wide path conversion. Supply a runtime library such as a compatible `lua51.dll` or `libluajit-5.1.so.2`; do not supply a Lua 5.4 library.

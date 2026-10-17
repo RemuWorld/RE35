@@ -315,6 +315,11 @@ local CE, Profile, Keys = require('re35'), require('command_tree.profile'), requ
 local function keys(value) for _, key in ipairs(Keys.tokens(value)) do session:handle(key) end end
 vim.o.columns, vim.o.lines = 120, 42
 vim.cmd.colorscheme('default')
+local complete_colors = vim.fn.getcompletion
+vim.fn.getcompletion = function(lead, kind, ...)
+  if kind == 'color' then return { 'blue', 'default', 'desert' } end
+  return complete_colors(lead, kind, ...)
+end
 for _, density in ipairs({ 'compact', 'minimal' }) do
   local profile = Profile.empty()
   profile.presentation = { version = 1, selected = density, presets = {} }
@@ -325,6 +330,11 @@ for _, density in ipairs({ 'compact', 'minimal' }) do
   H.ok(CE.open({ command = 'ui.theme', interactive = false }))
   local state, slots = session.active, density == 'compact' and 6 or 3
   H.eq('input', state.mode, 'The real theme command opens its ordinary input scene')
+  H.ok(vim.wait(20000, function()
+    local report = session.options.integrations.theme.classification_status(state.input.args.background)
+    return report.initialized and report.pending == 0
+  end, 10), 'Background theme inspection populates the live picker')
+  session:refresh_input_choices(); session:draw()
   H.ok(#state.input.all_choices > 1, 'Actual installed runtime colorschemes populate the picker')
   H.eq(slots + 2, footprint(state.view).height, density .. ' actual theme input uses only its prompt and page slots')
   local initial, input = footprint(state.view), state.input
@@ -343,6 +353,7 @@ for _, density in ipairs({ 'compact', 'minimal' }) do
   CE.close()
   H.eq('default', vim.g.colors_name, 'Closing the picker rolls back its real theme preview')
 end
+vim.fn.getcompletion = complete_colors
 -- Actual Results filtering retains the unfiltered target domain, including
 -- when no result is selected. Required identity text still names only the
 -- actual selected result; the private domain is a sizing reference.

@@ -3,7 +3,7 @@ if vim.fn.has("nvim-0.11") ~= 1 then
 end
 local K = require("command_tree.keys")
 local Entry, Profile = require("command_tree.entry"), require("command_tree.profile")
-local M = { version = "0.3.2" }
+local M = { version = "0.4.0" }
 local Lifecycle = require("command_tree.environment.lifecycle")
 local Builder, Options = require("command_tree.environment.builder"), require("command_tree.environment.options")
 local lifecycle = Lifecycle.new(M)
@@ -30,6 +30,13 @@ function M.close()
   if not ok then return false, err end
   local env = lifecycle:current(); if env then return env.session:close() end
 end
+function M.leave()
+  local ok, err = lifecycle:admit()
+  if not ok then return false, err end
+  local env = lifecycle:current()
+  if not env then return true end
+  return env.session:leave()
+end
 function M.suspend()
   local ok, err = lifecycle:admit()
   if not ok then return false, err end
@@ -51,6 +58,72 @@ function M.show(opts) return M.open(vim.tbl_extend("force", {}, opts or {}, { ki
 function M.search(query) return M.open({ search = query or "" }) end
 function M.state() local env = lifecycle:current(); return env and env.session:state() or { active = false } end
 function M.registry() return get().registry end
+function M.editor_keys()
+  return require('command_tree.editor_keys').status()
+end
+
+-- Direct editor entry and tree entry share Session dispatch. This envelope is
+-- data only: keys, source handles and execution authority belong to the host.
+function M.invoke(request, opts)
+  local intent, reason = require('command_environment.core.invocation').validate(request)
+  if not intent then return false, reason end
+  if opts ~= nil and type(opts) ~= 'table' then return false, 'Invocation options must be a table' end
+  opts = opts or {}
+  if opts.interactive ~= nil and type(opts.interactive) ~= 'boolean' then return false, 'Invocation interactive must be a boolean' end
+  if opts.done ~= nil and type(opts.done) ~= 'function' then return false, 'Invocation done must be a function' end
+  if opts.mode ~= nil and opts.mode ~= 'n' and opts.mode ~= 'x' and opts.mode ~= 'i' then
+    return false, 'Invocation mode must be n, x or i'
+  end
+  if opts.context ~= nil and type(opts.context) ~= 'table' then return false, 'Invocation context must be a table' end
+  local admitted, why = lifecycle:admit()
+  if not admitted then return false, why end
+  local env = get()
+  local command = env.registry:get(intent.command)
+  if not command or command.id ~= intent.command or command.persistent == false then
+    return false, 'Command is not available by stable ID: ' .. intent.command
+  end
+  local fields = {}
+  for _, field in ipairs(command.arguments or {}) do fields[field.name] = true end
+  for key in pairs(intent.args) do
+    if not fields[key] then return false, 'Unknown argument for ' .. command.id .. ': ' .. key end
+  end
+  if command.review_policy == 'explicit_apply' then
+    local gate = (command.arguments or {})[#(command.arguments or {})]
+    if not gate or gate.kind ~= 'boolean' or not gate.required then
+      return false, 'This command needs a required final Apply field before it can be invoked from editing'
+    end
+    -- Supplying scalar inputs does not supply a fresh Apply gesture. Open the
+    -- same final field even if a shortcut included an old true confirmation.
+    intent.args[gate.name] = nil
+  end
+  if env.session.active then return false, 'Leave the current command surface before invoking an editor shortcut' end
+  local context = opts.context or K.context(opts.mode)
+  if not K.valid(context) then return false, 'Invocation source is no longer available' end
+  context = vim.api.nvim_win_call(context.win, function() return K.context(opts.mode or context.mode) end)
+  local state, failure
+  if env.session.suspended then
+    state, failure = env.session:resume({ context = context, mode = opts.mode, interactive = false })
+  else
+    state, failure = env.session:open({ context = context, mode = opts.mode, interactive = false })
+  end
+  if not state then return false, failure or 'Could not attach the command surface' end
+  if lifecycle:current() ~= env or env.session.active ~= state or env.registry:get(intent.command) ~= command then
+    return false, 'Command or environment changed while entering; invoke it again'
+  end
+  local ok, accepted, detail, operation = pcall(env.session.run, env.session, command.id, intent.args,
+    nil, opts.done, false, state.ctx)
+  if not ok then
+    if env.session.active == state then state.message = tostring(accepted) end
+    accepted, detail = false, tostring(accepted)
+  end
+  if env.session.active == state then
+    env.session:draw()
+    if opts.interactive ~= false and #vim.api.nvim_list_uis() > 0 then
+      require('command_tree.session.input_driver').drive(env.session, state)
+    end
+  end
+  return accepted, detail, operation
+end
 
 function M.execute(id, args, opts)
   local admitted, admission_error = lifecycle:admit()

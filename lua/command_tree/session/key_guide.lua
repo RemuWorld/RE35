@@ -59,7 +59,7 @@ function M.help_hints(help)
         ['↑/↓'] = true, ['j/k'] = true, ['Ctrl+d/u'] = true })[key]
     if not known then return nil end
     local group = label:match('^[Bb]ack') or label:match('^[Cc]lose') or label:match('^[Ss]elect')
-      or label == 'List' or label == 'Page' or label == 'Scroll message' or label == 'Workspaces'
+      or label == 'Editor' or label == 'Reset' or label == 'List' or label == 'Page' or label == 'Scroll message' or label == 'Workspaces'
     group = group and 'navigation' or (label:lower():find('detail', 1, true)
       or label:lower():find('inspect', 1, true) or label == 'View' or label == 'Connection'
       or label == 'Status' or label == 'Configure backend') and 'information' or 'actions'

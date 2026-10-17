@@ -125,19 +125,20 @@ H.eq(nil, state.view.guide, 'Unrecognized adapter help keeps the below-panel fal
 H.ok(panel_text(state.view.details):gsub('%s', ''):find(('Custom adapter explanation without shortcut grammar'):gsub('%s', ''), 1, true),
   'Structured built-in controls never discard custom adapter prose')
 
--- The existing temporary editor destination is discoverable from ordinary
--- tree navigation, and its details explain how it differs from final close.
+-- Ordinary return and the Editor destination share navigation preservation;
+-- explicit reset remains discoverable without overloading the entry key.
 CE.close(); CE.open({ interactive = false }); state = session.active
 local guide = panel_text(state.view.guide)
 H.ok(guide:find('Ctrl+w Workspaces', 1, true), 'Ordinary tree guidance advertises the configured workspace route')
-H.ok(guide:find('Close session', 1, true), 'Ordinary tree guidance names the final close operation')
+H.ok(guide:find('Editor', 1, true), 'Ordinary tree guidance names the return to editing')
+H.ok(guide:find('Ctrl+c Reset', 1, true), 'Ordinary tree guidance names explicit disposal')
 keys('<C-w>')
 local destinations = session:workspace_choices()
 for index, destination in ipairs(destinations) do if destination.destination == 'editor' then state.selected = index; break end end
 session:draw()
 local editor_details = panel_text(state.view.details):gsub('%s', '')
 H.ok(editor_details:find('entryresumesnavigation', 1, true), 'Editor destination explains resuming')
-H.ok(editor_details:find('nextentrystartsfresh', 1, true), 'Editor destination explains final Close session')
+H.ok(editor_details:find('Ctrl-cresetsnavigation', 1, true), 'Editor destination explains explicit reset')
 H.ok(editor_details:find('Submittedbackgroundtaskscontinue', 1, true), 'Editor destination describes submitted task lifetime')
 
 -- The native replacement's last boolean submits immediately. Its guide must

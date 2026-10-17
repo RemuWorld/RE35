@@ -1,6 +1,7 @@
 -- Neovim rendering of the negotiated presentation model; no execution state.
 local P = {}
 local ns = vim.api.nvim_create_namespace('CommandTreeUI')
+local Text = require('command_tree.view.text_layout')
 
 local function geometry(V, data, opts)
   local model, K = opts.presentation, require('command_tree.keys')
@@ -62,19 +63,8 @@ end
 local incomplete = 'Review facts do not fit this viewport; enlarge it or reduce presentation spacing'
 local function wrapped_rows(V, text, width, maximum)
   if type(text) ~= 'string' then return nil end
-  text = text:gsub('[\r\n\t]', ' ')
-  local prefix = vim.fn.strcharpart(text, 0, 4096)
-  if #prefix ~= #text then return nil end
-  local current, rows = '', 1
-  for char in prefix:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-    if V.width(char) > width then return nil end
-    if V.width(current .. char) > width then
-      rows, current = rows + 1, ''
-      if rows > maximum then return nil end
-    end
-    current = current .. char
-  end
-  return rows
+  local rows, complete = Text.wrap(text, width, V.width, { max_chars = 4096, max_rows = maximum })
+  return complete and #rows or nil
 end
 
 local function preflight(V, data, opts, prepared, page_size)
@@ -94,6 +84,17 @@ local function preflight(V, data, opts, prepared, page_size)
     if not rows then complete = false; return height + 1 end
     return rows
   end
+  -- High-priority inline feedback cannot silently evict a required fact after
+  -- admission. Separate details have already removed these fields here.
+  local indent = prepared.legacy and prepared.density ~= 'minimal' and '  ' or ''
+  if data.message and data.message_role ~= 'normal' and not (prepared.legacy and data.error) then
+    common = common + cost(indent .. data.message)
+  end
+  if data.error then common = common + cost(indent .. data.error) end
+  if prepared.reason and not prepared.repeated_reason then
+    local prefix = prepared.legacy and prepared.density ~= 'full' and '' or 'Unavailable: '
+    common = common + cost(indent .. prefix .. prepared.reason)
+  end
   if not active then
     for _, text in ipairs({ data.required_label or false, data.target and 'Target: ' .. data.target or false,
       data.required_notice or false }) do
@@ -106,7 +107,7 @@ local function preflight(V, data, opts, prepared, page_size)
     return true, nil, math.max(1, math.min(page_size, height - common))
   end
   if review and data.input and data.label then common = common + cost(data.label) end
-  if review and data.details then common = common + cost('Target: ' .. (data.details.target or 'current buffer')) end
+  if review and data.details and data.details.target then common = common + cost('Target: ' .. data.details.target) end
   if data.query ~= nil then common = common + 1 end
   -- Each additional group is one inspectable page of atomic Before/After facts.
   -- Its line boundaries count, independently of the currently selected change.
@@ -165,8 +166,9 @@ function P.plan(V, data, opts, groups)
   end
   local help_rows = information.help and data.help
     and require('command_tree.view.panels').help_rows(V, data, width, groups) or nil
-  local metadata_rows = (prepared.show_details and 2 or 0)
-    + (data.details and (prepared.reason or prepared.show_details) and not prepared.repeated_reason and 1 or 0)
+  local metadata_rows = (prepared.show_details and (data.details.kind or data.details.source) and 1 or 0)
+    + (prepared.show_details and data.details.target and 1 or 0)
+    + (data.details and (prepared.reason or prepared.show_details and data.details.description) and not prepared.repeated_reason and 1 or 0)
     + (information.status and data.status and 1 or 0) + (information.help and data.help and (help_rows and #help_rows or 1) or 0)
     + (data.message and 1 or 0) + (data.error and 1 or 0) + (model.decoration.separator and 1 or 0)
   if prepared.legacy and data.message and data.error then metadata_rows = metadata_rows - 1 end
@@ -263,43 +265,33 @@ function P.draw(V, view, data, opts, groups)
   end
   local function line(chunks, priority, item_index, required)
     local value, complete = '', ''
+    local critical_kind = required or review and item_index ~= nil and 'review' or false
     for _, chunk in ipairs(chunks) do
       complete = complete .. tostring(chunk[1])
-      local text = V.clip(chunk[1], math.max(0, width - V.width(value)))
+      local remaining = math.max(0, width - V.width(value))
+      -- Required text was already bounded and wrapped. A second character
+      -- prefix clip could silently discard a long combining sequence even
+      -- though the complete visible unit fits its measured cell budget.
+      local text = critical_kind and V.width(chunk[1]) <= remaining and tostring(chunk[1]) or V.clip(chunk[1], remaining)
       if #text > 0 then marks[#marks + 1] = { #lines, #value, #value + #text, chunk[2] or groups.normal } end
       value = value .. text
     end
     lines[#lines + 1], priorities[#lines + 1], indices[#lines + 1] = value, priority or 1, item_index or false
-    critical[#lines] = required or review and item_index ~= nil and 'review' or false
+    critical[#lines] = critical_kind
     if critical[#lines] and V.width(complete) > width then refuse(critical[#lines]) end
   end
   local function required_line(text, role, priority, item_index, kind)
-    text = tostring(text):gsub('[\r\n\t]', ' ')
-    local prefix = vim.fn.strcharpart(text, 0, 4096)
-    if #prefix ~= #text then refuse(kind) end
-    local current, generated = '', 0
     -- Once a critical block exceeds the viewport, it is already incomplete.
     -- Keep one extra row for that refusal, rather than allocating thousands of
     -- wrapped rows that the priority trimmer would repeatedly scan/remove.
-    local row_limit = body_height + 1
-    local function emit()
-      if generated >= row_limit then refuse(kind); return false end
-      line({ { current, role } }, priority, item_index, kind)
-      generated = generated + 1
-      return true
-    end
-    for char in prefix:gmatch('[%z\1-\127\194-\244][\128-\191]*') do
-      if V.width(current .. char) > width then
-        if current ~= '' then
-          if not emit() then return end
-          current = ''
-          if generated >= row_limit then refuse(kind); return end
-        end
-        if V.width(char) > width then refuse(kind); char = V.clip(char, width) end
-      end
-      current = current .. char
-    end
-    emit()
+    local rows, complete = Text.wrap(tostring(text), width, V.width,
+      { max_chars = 4096, max_rows = body_height + 1 })
+    if not complete then refuse(kind) end
+    for _, text in ipairs(rows) do line({ { text, role } }, priority, item_index, kind) end
+  end
+  local function prose_line(text, role, priority)
+    local rows = Text.wrap(text, width, V.width, { max_rows = body_height + 1 })
+    for _, text in ipairs(rows) do line({ { text, role } }, priority) end
   end
   local repeated_reason, show_details, reason = prepared.repeated_reason, prepared.show_details, prepared.reason
   local page_size = prepared.page_size
@@ -412,28 +404,31 @@ function P.draw(V, view, data, opts, groups)
   end
   if data.target then required_line('Target: ' .. data.target, groups.normal, 3, nil, 'facts') end
   if show_details then
-    line({ { indent .. (data.details.kind or 'action') .. ' · ' .. (data.details.source or 'registered'), groups.muted } }, 0)
-    local text = indent .. 'Target: ' .. (data.details.target or 'current buffer')
-    if review then required_line(text, groups.normal, 3, nil, 'review')
-    else line({ { text, groups.normal } }, 0) end
+    local kind, source = data.details.kind, data.details.source
+    local metadata = kind and source and kind .. ' · ' .. source or kind or source
+    if metadata then prose_line(indent .. metadata, groups.muted, 0) end
+    if data.details.target then
+      local text = indent .. 'Target: ' .. data.details.target
+      if review then required_line('Target: ' .. data.details.target, groups.normal, 3, nil, 'review')
+      else prose_line(text, groups.normal, 0) end
+    end
   end
   if data.details and (reason or show_details) and not repeated_reason then
     local text = reason and ((legacy and density ~= 'full' and '' or 'Unavailable: ') .. reason) or data.details.description
-      or ((data.details.kind or 'action') .. ' · ' .. (data.details.target or data.details.id or ''))
-    line({ { indent .. text, reason and groups.warning or groups.normal } }, reason and 5 or 0)
+    if text then prose_line(indent .. text, reason and groups.warning or groups.normal, reason and 5 or 0) end
   end
   if information.status and data.status then line({ { indent .. data.status, groups.muted } }, 0) end
   if legacy and density == 'full' and (data.message or data.error or information.help and data.help) then line({ { '', groups.muted } }, 0) end
-  if data.message and not (legacy and data.error) then line({ { indent .. data.message, data.message_role == 'normal' and groups.normal or groups.warning } },
-    data.message_role == 'normal' and 0 or 5) end
-  if data.error then line({ { indent .. data.error, groups.error } }, 5) end
+  if data.message and not (legacy and data.error) then prose_line(indent .. data.message,
+    data.message_role == 'normal' and groups.normal or groups.warning, data.message_role == 'normal' and 0 or 5) end
+  if data.error then prose_line(indent .. data.error, groups.error, 5) end
   if information.help and data.help then
     local rows = require('command_tree.view.panels').help_rows(V, data, width, groups)
     if rows then for _, chunks in ipairs(rows) do
       if indent ~= '' then table.insert(chunks, 1, { indent, groups.normal }) end
       line(chunks, 0)
     end
-    else line({ { indent .. data.help, groups.normal } }, 0) end
+    else prose_line(indent .. data.help, groups.normal, 0) end
   end
   if pages > 1 and (information.status or review) then
     local paging = legacy and ('  %s  ·  %d/%d'):format(data.selected and '↑/↓ Select' or 'Ctrl-d/u', data.page, pages)

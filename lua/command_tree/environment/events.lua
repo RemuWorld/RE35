@@ -1,18 +1,27 @@
 -- Own editor hooks and the entry boundary for one live environment.
 local V = require('command_tree.view')
 local T, Entry = require('command_tree.triggers'), require('command_tree.entry')
+local EditorKeys = require('command_tree.editor_keys')
 local M = {}
 function M.clear()
+  local cleared, reason = pcall(EditorKeys.clear)
   Entry.clear(); T.clear()
   pcall(vim.api.nvim_del_augroup_by_name, 'CommandTree')
+  if not cleared then error(reason, 0) end
 end
 function M.install(env, api, current)
   local options, registry = env.options, env.registry
   V.highlights()
   T.setup(options, api.show)
   Entry.setup(options, api.open)
+  EditorKeys.setup(options.editor_keys, options.open_key, api.invoke)
   local group = vim.api.nvim_create_augroup("CommandTree", { clear = true })
-  vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = function() if current() == env then V.highlights(); env.session:refresh() end end })
+  vim.api.nvim_create_autocmd("ColorScheme", { group = group, callback = function()
+    if current() ~= env then return end
+    if (env.session.preview_depth or 0) > 0 then env.session.preview_palette_dirty = true; return end
+    if env.session.active then env.session.active.preview_identity = nil end
+    V.highlights(); env.session:refresh()
+  end })
   vim.api.nvim_create_autocmd({ "VimResized", "WinResized" }, { group = group, callback = function()
     vim.schedule(function() if current() == env then env.session:refresh() end end)
   end })

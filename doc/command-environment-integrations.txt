@@ -26,6 +26,23 @@ theme and an inspectable warning. Hosts with custom adapters keep their own
 storage and startup responsibility.
 Use integrations.theme = false to omit this command.
 
+The builtin picker classifies Light/Dark in separate clean Neovim processes.
+It inspects actual Normal backgrounds together with the resulting 'background'
+option. Themes supporting both appear in both lists. Pending, failed, transparent
+or unspecified observations are not choices; Checking shows pending work and Ctrl-h
+explains classification problems. Inspecting at most 256 themes, each appearance
+has a two-second process limit. Nothing is installed.
+
+Workers execute installed theme code using runtime paths and bounded relevant
+global options, but do not run user init or copy Lua setup-module state or user
+ColorScheme handlers. Setup-dependent themes can differ from the live editor;
+a custom adapter or direct native selection can handle omitted themes.
+The advisory cache is stdpath("cache") .. "/re35/theme-catalog-v1.json".
+Unchanged entries are reused, changed/new entries inspected and removed entries
+pruned. Transient worker failures are retried on reopening. A live mismatch
+corrects the list and restores the previous pair without writing startup state.
+Theme startup persistence and portable profiles use separate storage.
+
 An explicit theme adapter requires these callbacks: >
   require("re35").setup({
     integrations = {
@@ -63,6 +80,13 @@ constructed with { persist = true }; callers which supply it own startup.
 The default setup constructs and restores its own builtin adapter.
 Ctrl-h inspects the bounded full preview or storage error without discarding
 the active input. Preview rollback failure blocks Apply until close/reopen.
+Expected conditions have short summaries; full details remain inspectable.
+The builtin adapter reuses an unchanged theme/appearance preview and batches
+RE35's intermediate palette redraws. Other plugins' ColorScheme hooks still run.
+Custom preview callbacks retain their call behavior unless they explicitly
+provide input_ui.preview_key(ctx,args). A non-nil bounded string opts into reuse
+while that same command/form/field and key remain current; nil disables reuse.
+The adapter is responsible for including all preview-relevant inputs in its key.
 
 RUNNER                                                   *ce-integration-runner*
 

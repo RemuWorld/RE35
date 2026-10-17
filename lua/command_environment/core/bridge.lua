@@ -50,6 +50,10 @@ local function dispatch(op, data)
   if op == 'get' then return engine.index:get(data.id), 'Unknown command' end
   if op == 'search' then return U.array(engine.index:search(data.query, data.options)) end
   if op == 'words' then return U.array(engine.index:words(data.query)) end
+  if op == 'invocation_validate' then
+    document_page_request(data, { invocation = true }, 'Invocation validation request')
+    return refusal(require('command_environment.core.invocation').validate(data.invocation))
+  end
   if op == 'profile_capabilities' then
     document_page_request(data, {}, 'Profile capabilities request')
     return { contract_version = 1, profile_version = 1,

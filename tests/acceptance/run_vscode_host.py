@@ -35,6 +35,7 @@ def main() -> int:
     parser.add_argument('--cxx', type=Path)
     parser.add_argument('--report', required=True, type=Path)
     parser.add_argument('--timeout', type=float, default=150)
+    parser.add_argument('--invocation-only', action='store_true', help='Run only semantic invocation and real editor-bound command checks')
     args = parser.parse_args()
     if args.node and (not args.node.is_absolute() or not args.node.is_file()):
         parser.error('node must be an already installed absolute executable')
@@ -89,6 +90,9 @@ def main() -> int:
         'extensions.autoCheckUpdates': False}) + '\n', encoding='utf-8')
     environment = os.environ.copy()
     environment.pop('ELECTRON_RUN_AS_NODE', None)
+    environment.pop('RE35_TEST_INVOCATION_ONLY', None)
+    if args.invocation_only:
+        environment['RE35_TEST_INVOCATION_ONLY'] = '1'
     environment.update(RE35_HOST_TEST_DIR=str(workspace), RE35_TEST_HELPER=str(native / args.helper.name),
                        RE35_TEST_LUA_RUNTIME=str(args.lua_runtime), RE35_TEST_CORE=str(source_root / 'lua'))
     environment.pop('RE35_TEST_NODE', None)

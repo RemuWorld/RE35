@@ -5,19 +5,28 @@ function M.check()
   if vim.fn.has("nvim-0.11") == 1 then vim.health.ok("Neovim API requirement satisfied")
   else vim.health.error("Command Tree requires Neovim 0.11 or later") end
   if package.loaded["which-key"] then
-    vim.health.info("which-key is loaded; Command Environment owns only its explicit entry prefix")
+    vim.health.info("which-key is loaded; RE35 owns its entry prefix and explicitly configured editor_keys")
   else vim.health.ok("which-key is not loaded") end
   local count = 0
   local entry = require("command_tree.entry")
   for _ in pairs(entry.owned) do count = count + 1 end
   vim.health.info(count .. " entry mappings; originals are available in Key guide > Imported entry mappings")
-  vim.health.info("Normal editing before the entry key does not open Command Environment")
+  vim.health.info("No ordinary editing shortcuts are installed unless configured in editor_keys")
   if vim.api.nvim_get_hl(0, { name = "HistoryModeFrame", link = false }).fg == 0xE6A0A0 then
     vim.health.ok("History outer frame remains #E6A0A0")
   end
   local environment = require("command_tree")
   vim.health.info("Version: " .. environment.version)
   local registry = environment.registry()
+  for _, binding in ipairs(environment.editor_keys()) do
+    local command = registry:get(binding.command)
+    local message = binding.mode .. ' ' .. binding.key .. ' -> ' .. binding.command .. ': ' .. binding.status
+    if binding.reason then message = message .. ' (' .. binding.reason .. ')' end
+    if not command or command.id ~= binding.command then
+      vim.health.warn(message .. '; command is not currently registered')
+    elseif binding.status ~= 'active' and binding.status ~= 'available' then vim.health.warn(message)
+    else vim.health.info(message) end
+  end
   local format = registry:get("code.format")
   if format then vim.health.info("Formatter backend: " .. tostring(format.backend or "LSP")) end
   vim.health.info(#registry:list() .. " registered commands; semantic IDs are independent of keymaps")

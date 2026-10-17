@@ -61,7 +61,7 @@ for _, preset in ipairs({ false, true }) do
   data.selected = 2
   V.draw(view, data, opts)
   H.eq(initial, geometry(view), 'Selection and diagnostic text leave main stable')
-  H.eq(33, view.details.total, 'Right guide retains every diagnostic and description row')
+  H.eq(32, view.details.total, 'Right guide retains diagnostics, actual target and description without invented metadata')
   H.ok(not text(view.details):find('Esc', 1, true), 'Bottom panel does not duplicate right-side hints')
   H.eq(nil, view.details.pinned, 'Right guide removes duplicate pinned shortcut row')
   H.ok(V.scroll_details(view, 10), 'Long diagnostic remains independently scrollable')

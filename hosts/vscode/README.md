@@ -14,6 +14,28 @@ and known limitations. The complete
 Neovim command environment has not been ported. This is a source development
 extension, not a Marketplace release or a prebuilt VSIX.
 
+## Editor shortcuts and semantic invocation
+
+No editing shortcut is assigned by default. Add your preferred key in VS Code's
+`keybindings.json`, using the same command intent as the Neovim host:
+
+```json
+{
+  "key": "f6",
+  "command": "re35.execute",
+  "args": { "command": "search.document", "args": { "query": "TODO" } },
+  "when": "editorTextFocus && !editorReadonly"
+}
+```
+
+`re35.execute` uses an exact supported semantic ID and optional `args` object.
+Missing inputs open the same native input controls; supplied document query,
+replacement and project query values bypass only those input prompts. Replacement
+still opens diff/review and requires Apply. Unknown IDs/arguments are refused,
+and source changes invalidate the request. Tree and native palette commands use
+the same route. Editor key notation/conflict precedence belongs to VS Code;
+RE35 does not modify user keybindings or install a modal/Vim engine.
+
 ## Build and open
 
 Build the repository's optional native targets using the instructions in

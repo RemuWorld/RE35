@@ -96,7 +96,7 @@ function createResultActions(getHost, views = {}) {
       const accepted = host.workflowService().searchService().cancelActive();
       await vscode.window.showInformationMessage(accepted ? 'RE35 search cancellation requested; retained results show observed completion.' : 'RE35 has no active project search.');
     },
-    'search.project_text': async () => {
+    'search.project_text': async (args = {}) => {
       const host = getHost(), workflow = host.workflowService(); owned(host);
       await workflow.inspectSelection(); owned(host);
       const current = workflow.profile.current(), provider = current.profile.adapters && current.profile.adapters.project_search || 'builtin';
@@ -108,7 +108,7 @@ function createResultActions(getHost, views = {}) {
         ], { title: 'RE35 Search Options', placeHolder: 'ripgrep syntax; no multiline or PCRE2' }, { requiredTitle: true });
         owned(host); if (!selected) return; mode = selected.mode; caseMode = selected.caseMode;
       }
-      const query = await host.presentationService().input('input', { title: `RE35 Project Search · ${provider}`,
+      const query = Object.hasOwn(args, 'query') ? args.query : await host.presentationService().input('input', { title: `RE35 Project Search · ${provider}`,
         placeHolder: mode === 'literal' ? 'Single-line literal text in saved project files' : 'Single-line ripgrep regex', ignoreFocusOut: true },
       { requiredTitle: true });
       owned(host); if (query === undefined) return;

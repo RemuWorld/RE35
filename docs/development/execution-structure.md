@@ -39,7 +39,9 @@ and completion evidence wherever the backend exposes them.
 
 ```mermaid
 flowchart TD
-  Public[Public Session Run: no Apply authority] --> Scope[Session private scope boundary]
+  Keys[Explicit editor_keys / invoke intent] --> Intent[Shared invocation validation]
+  Intent --> Public[Public Session Run: no Apply authority]
+  Public --> Scope[Session private scope boundary]
   Form[Final Apply input: captured private form] --> Scope
   Scope --> Dispatch[Dispatch: validate and choose route]
   Dispatch --> UI[Workspace or Session action]
@@ -59,10 +61,17 @@ The diagram shows responsibility and call direction. A running task can outlive
 its UI; not every completion returns to an open Session. Input and cancellation
 can be synchronous or delayed. A cancellation request is not proof of exit.
 
+`invoke({command,args})` validates a bounded data intent, reattaches parked
+navigation with a fresh source, rechecks command/environment identity, then uses
+Session dispatch. Explicit Apply fields require a new gesture. Host key syntax,
+callbacks and live targets never enter that portable envelope. VS Code's
+`re35.execute` uses the same validator before its existing native actions.
+
 ## Neovim owners and functions
 
 | Module | Responsibility | Entry or stages |
 | --- | --- | --- |
+| `editor_keys.lua` | Explicit host mappings, conflict checks, exact replacement and owned restoration | `validate`, `check`, `setup`, `clear`, `status` |
 | `session.lua` | Session coordination, private shared execution scope and Session API | `prepare`, `open`, `run`, lexical `run_scoped` / `dispatch_submission`, private `execution_scope`, `consume_submission` |
 | `session/dispatch.lua` | Command routes and origin-aware UI completion | `run` -> workspace/action/form or `execute`; recipe dispatch and `completion` |
 | `executor.lua` | Command admission, target/argument checks, backend invocation, pending-key ownership and bounded finished history | `execute`, `list`, `cancel`, `force_cancel` |
@@ -78,8 +87,10 @@ Model/Workspace/Recovery responsibilities are not merged into the coordinator.
 and final disposal. `session/input_driver.lua` owns polling and the leased paste
 hook; `session/input.lua` owns argument forms. Editor detaches the surface while
 retaining safe navigation and nonsecret drafts. Resume does not retain input,
-review, completion or recovery authority. Workspace stacks and native prefix
-replay must finish before suspension. Failed final cleanup retains a disposal-only
+review, completion or recovery authority. Ordinary `leave()` releases Workspace
+frames and returns to their selector; changed Settings drafts and live Workspace
+input block that return. Strict legacy `suspend()` still refuses live stacks.
+Native prefix replay closes rather than parking an incomplete sequence. Failed final cleanup retains a disposal-only
 owner for known views; workspace leave hooks are not replayed to retry those views.
 
 Executor prompt/completion callbacks, private Apply scope and workspace API

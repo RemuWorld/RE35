@@ -111,6 +111,7 @@ end
 local function run_recipe(self, state, command, args, ctx, done, input, caller_id)
   if input and input.command.id == caller_id and not input.callback then
     self.drafts:save(command, input, ctx)
+    self:release_input_choices(input)
     state.input = nil
     self:pop_mode(true)
   end
@@ -137,6 +138,7 @@ local function completion(self, state, command, ctx, done, origin)
     if self:is_attached(state, origin.attachment) then
       if ok and origin.input and origin.parent_mode == 'workspace' and state.input == origin.input
         and origin.navigation == (state.navigation or 0) then
+        self:release_input_choices(origin.input)
         state.input = nil
         self:pop_mode(true)
         state.message = warning or notice or (command.name or command.id) .. ' completed'
@@ -144,13 +146,15 @@ local function completion(self, state, command, ctx, done, origin)
         self:draw()
       elseif ok and warning then
         if origin.input and state.input == origin.input and origin.navigation == (state.navigation or 0) then
+          self:release_input_choices(origin.input)
           state.input = nil
           self:pop_mode(true)
         end
         self:record_feedback('Storage', warning, command)
         self:draw()
       elseif ok and origin.mode ~= 'workspace' and origin.navigation == (state.navigation or 0) then
-        self:close()
+        local left, reason = self:leave()
+        if not left then state.message = reason; self:draw() end
         if notice and #vim.api.nvim_list_uis() > 0 then vim.notify(notice, vim.log.levels.INFO, { title = 'RE35' }) end
       elseif ok then state.message = (command.name or command.id) .. ' completed; results are available in Tasks'; self:draw()
       else
@@ -179,7 +183,13 @@ local function execute(self, state, command, args, ctx, done, process_target, ex
     return run_recipe(self, state, command, args, ctx, done, origin.input, caller_id)
   end
   state.busy, state.message = true, 'Running ' .. (command.name or command.id) .. '…'
-  if command.handoff then self:close() end
+  if command.handoff then
+    local left, reason = self:leave()
+    if not left then
+      state.busy = false
+      return reject(state, done, reason or 'Could not return to the editor')
+    end
+  end
   local complete = completion(self, state, command, ctx, done, origin)
   local accepted, detail, operation = self.executor:execute(command.id, args, ctx, complete, {
     with_submission = execution_scope and execution_scope(command), process_target = process_target,
@@ -208,6 +218,9 @@ function M.run(self, id, args, route, done, prepared, context, process_target, e
   end
   if not command then return reject(state, done, 'Command is no longer registered') end
   local available, reason = self.registry:available(command.id, ctx)
+  if self.active ~= state or self.registry:get(command.id) ~= command or not K.valid(ctx) then
+    return reject(state, done, 'Command or source changed during availability inspection; select it again')
+  end
   if not available then retain_backend_query(state, command, args); return reject(state, done, reason) end
   if command.workspace then return open_workspace(self, state, command, route, done) end
   if command.session_action then return session_action(self, state, command, ctx, done) end

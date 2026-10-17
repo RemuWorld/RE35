@@ -179,20 +179,86 @@ function M.attach(self)
     end)
   end
 
-  function self:suspend()
+  -- Ordinary return to editing keeps navigation, not live Workspace frames.
+  -- Workspace leave hooks own their drafts/resources and may keep only their
+  -- declared scalar memory. A later entry constructs a fresh frame.
+  function self:leave()
+    if self.active and self.active.mode == 'keymaps' then return self:close() end
+    if not self.active then return self.suspended ~= nil end
+    return self:suspend({ leave_workspaces = true })
+  end
+
+  function self:suspend(opts)
+    opts = opts or {}
     return transition(self, 'suspend', function()
       local state = self.active
       if not state then return false, 'Command session is not attached' end
       if not K.valid(state.ctx) then return false, 'Original editor window is no longer available' end
       if state.workspace_mutating then return false, 'Workspace lifecycle is already changing' end
-      if #(state.stack or {}) > 0 then
+      if #(state.stack or {}) > 0 and not opts.leave_workspaces then
         state.message = 'Return from the current workspace before switching to Editor; its drafts and resources were kept'
         return false, state.message
+      end
+      if opts.leave_workspaces then
+        for _, frame in ipairs(state.stack or {}) do
+          if frame.data.input_active or state.input and state.input.callback then
+            state.message = 'Finish the Workspace input or press Esc before returning to Editor'
+            return false, state.message
+          end
+          if frame.id == 'settings' and frame.data.draft then
+            local ok, changed = pcall(require('command_tree.settings.transaction').changes, frame)
+            if not ok or #changed > 0 then
+              state.message = 'Apply or discard the Settings draft before returning to Editor'
+              return false, state.message
+            end
+          end
+        end
       end
       if state.mode == 'keymaps' then return false, 'Finish or close the native key guide before switching to Editor' end
       if not self:clear_preview() then return false, state.message end
       local chain = inputs(state)
       for index, input in ipairs(chain) do save_draft(self, input, index == 1 or index == 2 and state.input.callback ~= nil, true) end
+      if #(state.stack or {}) > 0 or state.cleanup_views then
+        local workspace = self.workspaces:active(state)
+        local selected_id = workspace and workspace.id
+        local safe_input = state.input and state.input.command.id
+        local views = cleanup_views(state)
+        local cleaned, reasons = true, nil
+        if workspace then cleaned, reasons = self.workspaces:clear(state) end
+        -- Clear must run before detaching the input owner. Hooks cannot resume
+        -- stale forms while the lifecycle transition is in progress.
+        local errors = cleaned == false and reasons or {}
+        for _, view in ipairs(views) do
+          local ok, closed, why = pcall(V.close, view)
+          if not ok then errors[#errors + 1] = tostring(closed)
+          elseif not closed then errors[#errors + 1] = tostring(why) end
+        end
+        if workspace then
+          state.workspace_returns, state.frames = {}, { { mode='tree', path={}, page=1, selected=1 } }
+          Navigation.restore(state, { mode='selector', path={}, query='', query_cursor=0,
+            selector_filtering=false, selected=1, page=1 })
+          for index, item in ipairs(self.workspaces:list()) do
+            if item.id == selected_id then state.selected = index; break end
+          end
+          if safe_input then
+            state.frames[#state.frames + 1] = Navigation.snapshot(state)
+            Navigation.restore(state, { mode='inspect', path={}, inspected_id=safe_input, page=1 })
+          end
+        end
+        if #errors > 0 then
+          -- Workspace ownership has already ended. Failed view cleanup must
+          -- not leave a hidden form or its old Apply authority executable.
+          local settle = retire_inputs(state, chain)
+          invalidate(state)
+          -- Keep the input loop attached for the cleanup error, while retiring
+          -- callbacks captured by Workspace frames which have already left.
+          self:bind_workspace(state)
+          settle()
+          state.message = 'Could not leave Workspace: ' .. table.concat(errors, '; '):sub(1, 8192)
+          return false, state.message
+        end
+        state.cleanup_views = nil
+      end
       local closed, why = V.close(state.view)
       if not closed then state.message = 'Could not detach command surface: ' .. tostring(why); return false, state.message end
       retain_navigation(state)

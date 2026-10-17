@@ -52,10 +52,11 @@ function M.attach(self)
       return
     end
     local opts = vim.tbl_extend("force", {}, self.options.window, { density = state.density })
+    local diagnostic = Feedback.display(state)
     local data = { title = "Commands", path = self.options.open_key .. " " .. path_label(state.path),
       label = "Commands", items = {}, message = state.message, notice = Feedback.notice(state),
-      page = state.page, diagnostic = Feedback.current(state),
-      help = "Esc Back  ·  " .. K.label(self.options.keys.search) .. " Search  ·  " .. K.label(self.options.keys.detail) .. " View  ·  " .. self.options.open_key .. " Close session" }
+      page = state.page, diagnostic = diagnostic,
+      help = "Esc Back  ·  " .. K.label(self.options.keys.search) .. " Search  ·  " .. K.label(self.options.keys.detail) .. " View  ·  " .. self.options.open_key .. " Editor  ·  <C-c> Reset" }
     if state.mode == "search" or state.mode == "words" then
       local words = state.mode == "words"
       data.title, data.label, data.query = words and "Paths" or "Search", words and "Word paths" or state.filter and (state.filter == "recent" and "Recent" or "Favorites") or "All commands", Text.display(state.query or "", state.query_cursor)
@@ -89,11 +90,11 @@ function M.attach(self)
         data.query_text, data.query_cursor = state.query or "", state.query_cursor
       end
       data.selected, data.help = state.selected, state.selector_filtering and "Enter Open  ·  Esc Finish filter"
-        or "Enter Open  ·  / Filter  ·  Esc Back  ·  " .. self.options.open_key .. " Close session"
+        or "Enter Open  ·  / Filter  ·  Esc Back  ·  " .. self.options.open_key .. " Editor  ·  <C-c> Reset"
       local selected_workspace = workspaces[state.selected]
       if selected_workspace and selected_workspace.destination == 'editor' then
         data.details = { description = 'Temporarily return to the native editor. Plain ' .. self.options.open_key
-          .. ' entry resumes navigation; Close session ends navigation so the next entry starts fresh. Submitted background tasks continue.' }
+          .. ' entry resumes navigation. Ctrl-c resets navigation. Submitted background tasks continue.' }
       end
       data.empty = "No matching workspaces"
     elseif state.mode == "inspect" then
@@ -123,10 +124,11 @@ function M.attach(self)
       else data.message = "Command is no longer registered; its saved reference is preserved" end
     elseif state.mode == 'feedback' then
       local record = state.feedback_inspection or {}
-      data.title, data.label, data.input = 'Diagnostic details', record.phase or 'Diagnostic', true
+      data.title, data.label, data.input = record.kind == 'condition' and 'Condition details' or 'Diagnostic details', record.phase or 'Diagnostic', true
       data.path = self.options.open_key .. ' › Diagnostic'
       data.diagnostic, data.message = record, nil
       data.items = { { key = 'Phase', name = record.phase or 'Unknown' } }
+      if record.code then data.items[#data.items + 1] = { key = 'Code', name = record.code } end
       if record.command_id then data.items[#data.items + 1] = { key = 'Command', name = record.command_id } end
       if record.provider then data.items[#data.items + 1] = { key = 'Provider', name = record.provider } end
       if record.field then data.items[#data.items + 1] = { key = 'Field', name = record.field } end
@@ -159,6 +161,7 @@ function M.attach(self)
       data.input = true
       local input = state.input
       local field = input.command.arguments[input.index]
+      local status_inspectable = false
       data.title, data.label = input.command.name, (field.prompt or field.name) .. " (" .. input.index .. "/" .. #input.command.arguments .. ")"
       data.path = self.options.open_key .. " " .. path_label(state.path) .. " › " .. field.name
       if input.choices then
@@ -166,7 +169,7 @@ function M.attach(self)
         -- count or selection. Oversized/private domains keep the larger safe
         -- reading budget without copying unbounded labels into the view.
         data._input_choice_labels = false
-        local domain = input.all_choices or input.choices
+        local domain = input.choice_domain or input.all_choices or input.choices
         if not field.secret and #domain <= 1024 then
           local labels = {}
           for _, item in ipairs(domain) do
@@ -218,7 +221,10 @@ function M.attach(self)
         if not self:is_attached(state, attachment) or state.mode ~= 'input' or state.input ~= input
           or not input.callback and self.registry:get(input.command.id) ~= input.command then return end
         if status then
-          if status.label and status.label ~= '' then data.label = status.label .. ' · ' .. data.label end
+          status_inspectable = status.inspectable == true
+          if status.label and status.label ~= '' then
+            data.label = #input.command.arguments == 1 and status.label or status.label .. ' · ' .. data.label
+          end
           if status.help and status.help ~= '' then
             local hints = Guide.help_hints(status.help)
             if not input.filtering or not hints then
@@ -227,16 +233,19 @@ function M.attach(self)
               else data.hints = nil end -- Unknown adapter prose keeps its below-panel fallback.
             end
           end
-          if status.description and status.description ~= '' then data.details = { description = status.description } end
+          if status.description and status.description ~= '' then
+            data.details = vim.tbl_extend('force', {}, data.details or {}, { description = status.description })
+          end
         end
       end
       if not field.required and not input.callback then
         if data.hints then picker_hint(data, '<C-s>', 'Skip', 'actions')
         else data.help = data.help .. "  ·  Ctrl-s Skip" end
       end
-      if data.diagnostic then
-        if data.hints then picker_hint(data, self.options.keys.inspect or '<C-h>', 'Inspect error', 'information')
-        else data.help = data.help .. '  ·  ' .. K.label(self.options.keys.inspect or '<C-h>') .. ' Inspect error' end
+      if data.diagnostic or status_inspectable then
+        local inspect = data.diagnostic and data.diagnostic.kind ~= 'condition' and 'Inspect error' or 'Inspect details'
+        if data.hints then picker_hint(data, self.options.keys.inspect or '<C-h>', inspect, 'information')
+        else data.help = data.help .. '  ·  ' .. K.label(self.options.keys.inspect or '<C-h>') .. ' ' .. inspect end
       end
     else
       local node = state.mode == "keymaps" and Maps.node(state.keymap_root, state.path) or self.registry:node(state.path)
@@ -249,7 +258,7 @@ function M.attach(self)
         data.title, data.path = "Key Guide", path_label(state.path)
         local view_key = not guide_owns_key(state, self.options.keys.detail) and self.options.keys.detail
           or not guide_owns_key(state, "<F1>") and "<F1>" or nil
-        data.help = "Esc Back  ·  Enter Execute  ·  " .. (view_key and (K.label(view_key) .. " View  ·  ") or "") .. self.options.open_key .. " Close"
+        data.help = "Esc Back  ·  Enter Execute  ·  " .. (view_key and (K.label(view_key) .. " View  ·  ") or "") .. self.options.open_key .. " Editor  ·  <C-c> Reset"
         for _, entry in ipairs(Maps.items(node)) do
           local value = entry.node.group_name or entry.node.name or "Group"
           data.items[#data.items + 1] = { key = entry.key, name = type(value) == "function" and tostring(value(state.ctx)) or value,

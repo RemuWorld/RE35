@@ -1,5 +1,34 @@
 # Changelog
 
+## 0.4.0
+
+- Return to editing with the entry key, root Back or Workspaces > Editor and
+  resume safe navigation on the next entry. Ctrl-c / `close()` explicitly reset
+  the session. Forms retain nonsecret drafts, never previous Apply authority.
+  Workspace resources are released and reconstructed rather than kept hidden.
+- Assign optional Neovim `editor_keys` to stable command IDs and arguments.
+  Existing maps and prefix conflicts are checked before setup changes; exact
+  replacement is opt-in and owned originals are restored on disable.
+- Invoke the same `{command, args}` intent through Neovim `invoke()` and VS Code
+  `re35.execute`, including native editor keybindings. Missing inputs use existing
+  forms; availability, source checks, reviews, Results and recovery still apply.
+  The shared data validator does not itself authorize or execute a command.
+
+- Classify installed themes into Light/Dark lists in separate Neovim workers.
+  Themes supporting both appear in both lists. Show checking state and expose
+  classification problems through Ctrl-h; cache unchanged observations and prune
+  removed themes. Live application still checks the requested appearance.
+- Reuse unchanged builtin theme previews and defer RE35's intermediate palette
+  redraws. Filter/caret movement no longer reloads an unchanged theme. Custom
+  preview callbacks retain their behavior unless they opt into identity reuse.
+  Avoid rewriting unchanged panel text/options while correcting external changes.
+- Keep expected preview conditions concise, with bounded full details available
+  through Ctrl-h. Show actual metadata rather than invented command/target rows,
+  and retain save/session scope in Minimal theme selection.
+- Wrap descriptions and required facts at words or spaced Korean units first.
+  Split oversized tokens only when needed, retain common combining/emoji
+  sequences and use the same layout for required-text rendering and admission.
+
 ## 0.3.2
 
 - Reject incompatible colorscheme appearances instead of forcing a background

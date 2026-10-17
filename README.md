@@ -9,7 +9,7 @@ workflow semantics. Hosts connect those definitions to their UI, editor services
 and tools. Portable profiles carry user declarations; supported operations and
 live task history depend on the host.
 
-**Version 0.3.2.** Neovim is the primary host.
+**Version 0.4.0.** Neovim is the primary host.
 The optional VS Code desktop development host supports a defined subset of
 document and project workflows. See [command coverage](docs/command-coverage.md)
 and [compatibility](docs/compatibility.md) for supported scope and limitations.
@@ -17,7 +17,8 @@ and [compatibility](docs/compatibility.md) for supported scope and limitations.
 ## Neovim
 
 Requires **Neovim 0.11+** on Windows or Linux. No other plugin is required.
-Press `\` to open RE35; ordinary Normal-mode keys remain available before entry.
+Press `\` to open RE35. Ordinary editing keys remain available; optional
+`editor_keys` can invoke RE35 commands directly.
 
 - Navigate a command tree or search commands, with aliases, favorites and quick slots.
 - Enter typed arguments with validation, completion and relevant command status.
@@ -28,9 +29,11 @@ Press `\` to open RE35; ordinary Normal-mode keys remain available before entry.
 - Edit portable profiles, custom commands and workspace bindings.
 - Create, edit and share appearance presets, including Full, Compact and Minimal views.
 
-0.3.2 corrects incompatible theme appearance handling, including Peachpuff's
-Light-only behavior, while retaining 0.3.1's guidance and panel improvements.
-Existing profiles, exit behavior and shared contract versions are retained.
+0.4.0 connects explicitly assigned editing shortcuts to stable command IDs in
+Neovim and VS Code. Returning to editing preserves safe navigation; Ctrl-c
+resets it. It also adds cached Light/Dark theme lists, avoids redundant theme
+previews, and improves concise feedback and word-based text wrapping.
+Existing portable profiles and shared contract versions remain compatible.
 
 ## Install
 
@@ -39,7 +42,7 @@ With lazy.nvim, pin the version you want to use:
 ```lua
 {
   "RemuWorld/RE35",
-  tag = "v0.3.2",
+  tag = "v0.4.0",
   config = function()
     require("re35").setup()
   end,
@@ -78,7 +81,7 @@ Shift-PageDown scroll the independent details panel. Leave any active workspace,
 then select Editor to return to native editing; the next plain `\` entry resumes
 navigation. See [configuration](docs/configuration.md) for theme
 persistence, theme controls, list navigation and panel options. The
-[update checks](docs/configuration.md#updating-to-032) describe useful
+[update checks](docs/configuration.md#updating-to-040) describe useful
 flows to try with your own configuration.
 
 ## Other integrations

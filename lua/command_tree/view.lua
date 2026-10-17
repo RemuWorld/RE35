@@ -139,20 +139,41 @@ function M.window(view, lines, config, frame)
     view.buf = vim.api.nvim_create_buf(false, true)
     vim.bo[view.buf].bufhidden, vim.bo[view.buf].filetype = "wipe", "command-tree"
   end
-  vim.bo[view.buf].modifiable = true
-  vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, lines)
-  vim.bo[view.buf].modifiable = false
+  -- Compare live contents, rather than remembering a previous draw. Companion
+  -- panels often stay identical while a selection/filter changes, and foreign
+  -- edits still need correction on the next render.
+  local changed = vim.api.nvim_buf_line_count(view.buf) ~= #lines
+  if not changed then
+    local current = vim.api.nvim_buf_get_lines(view.buf, 0, #lines, false)
+    for index, text in ipairs(lines) do
+      if current[index] ~= text then changed = true; break end
+    end
+  end
+  if changed then
+    vim.api.nvim_set_option_value('modifiable', true, { buf = view.buf })
+    vim.api.nvim_buf_set_lines(view.buf, 0, -1, false, lines)
+  end
+  if vim.api.nvim_get_option_value('modifiable', { buf = view.buf }) then
+    vim.api.nvim_set_option_value('modifiable', false, { buf = view.buf })
+  end
   config.style, config.focusable, config.noautocmd = "minimal", false, true
   if view.win and vim.api.nvim_win_is_valid(view.win) then
     config.noautocmd = nil
     vim.api.nvim_win_set_config(view.win, config)
   else view.win = vim.api.nvim_open_win(view.buf, false, config) end
-  local wo = vim.wo[view.win]
-  wo.winblend, wo.wrap, wo.scrolloff, wo.sidescrolloff = 0, false, 0, 0
-  wo.cursorline, wo.signcolumn, wo.statuscolumn = false, "no", ""
-  wo.winhighlight = frame and ("Normal:" .. (type(frame) == "string" and frame or "HistoryModeFrame")
+  local function option(name, value)
+    -- Explicit handles avoid temporary editor-context switches in vim.wo's
+    -- setters. Inspect actual values each time so user/plugin changes remain
+    -- observable; there is no cross-draw option cache to invalidate.
+    if vim.api.nvim_get_option_value(name, { win = view.win }) ~= value then
+      vim.api.nvim_set_option_value(name, value, { win = view.win })
+    end
+  end
+  for name, value in pairs({ winblend = 0, wrap = false, scrolloff = 0, sidescrolloff = 0,
+    cursorline = false, signcolumn = 'no', statuscolumn = '' }) do option(name, value) end
+  option('winhighlight', frame and ("Normal:" .. (type(frame) == "string" and frame or "HistoryModeFrame")
     .. ",EndOfBuffer:" .. (type(frame) == "string" and frame or "HistoryModeFrame"))
-    or "Normal:CommandTreeNormal,FloatBorder:CommandTreeBorder,FloatTitle:CommandTreeTitle,EndOfBuffer:CommandTreeNormal"
+    or "Normal:CommandTreeNormal,FloatBorder:CommandTreeBorder,FloatTitle:CommandTreeTitle,EndOfBuffer:CommandTreeNormal")
   return view
 end
 

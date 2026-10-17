@@ -38,7 +38,7 @@ for _, preset in ipairs({ false, true }) do
   V.draw(view, data, opts)
   H.eq(nil, view.status, 'A storage failure removes the success panel')
   H.ok(not title(view):find('Saved · startup', 1, true), 'Stale success cannot label a storage failure')
-  H.ok(table.concat(view.details.lines, ''):find('disk denied', 1, true), 'Storage failure remains inspectable across wrapped rows below')
+  H.ok(table.concat(view.details.lines, ' '):find('disk denied', 1, true), 'Storage failure remains inspectable across wrapped word boundaries below')
   data.message, data.error = message, 'A real error'
   V.draw(view, data, opts)
   H.eq(nil, view.status, 'An error removes the success panel')

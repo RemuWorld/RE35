@@ -4,6 +4,7 @@ const path = require('node:path');
 const { createHash } = require('node:crypto');
 const { isDeepStrictEqual } = require('node:util');
 const { Backend } = require('./backend');
+const { createInvoker } = require('./invocation');
 const Pages = require('./document-pages');
 const { WorkflowHost } = require('./workflow');
 const { PresentationService } = require('./presentation');
@@ -258,7 +259,7 @@ class Host {
   async showResults() {
     const result = this.results;
     if (!result) throw new Error('Run a document search first');
-    if (!result.value.locations.length) { await vscode.window.showInformationMessage('No literal matches in this document'); return; }
+    if (!result.value.locations.length) { void vscode.window.showInformationMessage('No literal matches in this document'); return; }
     const chosen = await this.presentationService().pick('results', result.value.locations.map(location => ({
       label: `${location.range.start.line + 1}:${location.range.start.character + 1}  ${location.text}`, location
     })), { title: 'RE35 Document Results', placeHolder: result.value.truncated ? 'Results reached the count or byte limit' : 'Choose a location' });
@@ -301,7 +302,14 @@ function activate(context) {
     if (!editor || editor.document.uri.scheme === 're35-preview') throw new Error('Open the source text editor first');
     return editor;
   };
-  const prompt = placeHolder => getHost().presentationService().input('input', { title: 'RE35', placeHolder, ignoreFocusOut: true });
+  const owned = service => {
+    if (service.disposed || getHost() !== service || !vscode.workspace.isTrusted) throw new Error('Command owner changed; open it again');
+  };
+  const prompt = (service, placeHolder) => service.presentationService().input('input', { title: 'RE35', placeHolder, ignoreFocusOut: true });
+  const documentContext = () => {
+    const editor = source();
+    return { editor, original: capture(editor.document) };
+  };
   const actions = {
     ...createWorkflowActions(getHost),
     ...createAppearanceActions(getHost, vscode),
@@ -319,31 +327,41 @@ function activate(context) {
         description: 'Native fallback', detail: `${JSON.stringify(value.requested)} → ${JSON.stringify(value.effective)} · ${value.reason}` }))],
       { title: `RE35 Presentation: ${chosen.scene}`, placeHolder: 'Layout fallback values are preferences, not native widget dimensions.' }, { requiredTitle: true });
     },
-    'search.document': async () => {
-      const editor = source(), original = capture(editor.document), query = await prompt('Literal text to find in the current document');
+    'search.document': async (args = {}, context = documentContext()) => {
+      const service = getHost(), { editor, original } = context;
+      if (!same(editor.document, original)) throw new Error('Source changed before input; open the command again');
+      const query = Object.hasOwn(args, 'query') ? args.query : await prompt(service, 'Literal text to find in the current document');
       if (query === undefined) return;
+      owned(service);
       if (!same(editor.document, original)) throw new Error('Source changed during input; open the command again');
-      await getHost().find(editor.document, query);
-      await getHost().showResults();
+      await service.find(editor.document, query);
+      owned(service);
+      await service.showResults();
     },
-    'edit.replace_literal': async () => {
-      const editor = source(), original = capture(editor.document), find = await prompt('Literal text to replace');
+    'edit.replace_literal': async (args = {}, context = documentContext()) => {
+      const service = getHost(), { editor, original } = context;
+      if (!same(editor.document, original)) throw new Error('Source changed before input; open the command again');
+      const find = Object.hasOwn(args, 'find') ? args.find : await prompt(service, 'Literal text to replace');
       if (find === undefined) return;
-      const replacement = await prompt('Replacement text (empty is allowed)');
+      owned(service);
+      const replacement = Object.hasOwn(args, 'replace') ? args.replace : await prompt(service, 'Replacement text (empty is allowed)');
       if (replacement === undefined) return;
+      owned(service);
       if (!same(editor.document, original)) throw new Error('Source changed during input; open the command again');
-      const service = getHost(), receipt = await service.prepareReplace(editor.document, find, replacement);
+      const receipt = await service.prepareReplace(editor.document, find, replacement);
       const uri = vscode.Uri.parse(`re35-preview:/${++service.previewSerial}`);
       service.previews.set(uri.toString(), receipt.plan.next_lines.join(editor.document.eol === vscode.EndOfLine.CRLF ? '\r\n' : '\n'));
       try {
         await vscode.commands.executeCommand('vscode.diff', editor.document.uri, uri, 'RE35 Replacement Preview');
+        owned(service);
         const choice = await service.presentationService().pick('review', [
           { label: `Apply ${receipt.plan.match_count} replacements`, apply: true }, { label: 'Discard', apply: false }
         ], { title: 'RE35 Review', placeHolder: 'Preview has not changed or saved the source document' });
+        owned(service);
         if (choice && choice.apply) {
           await vscode.window.showTextDocument(editor.document, { preview: false });
           const count = await service.apply(vscode.window.activeTextEditor, receipt);
-          await vscode.window.showInformationMessage(`RE35 applied ${count} replacements. Use editor Undo to reverse them.`);
+          void vscode.window.showInformationMessage(`RE35 applied ${count} replacements. Use editor Undo to reverse them.`);
         } else await service.discard(receipt);
       } finally {
         service.previews.delete(uri.toString());
@@ -351,9 +369,14 @@ function activate(context) {
       }
     }
   };
-  const handle = action => async () => {
-    try { await action(); } catch (error) { await vscode.window.showErrorMessage('RE35: ' + error.message); }
+  const invoke = createInvoker(getHost, definitions, actions, definition =>
+    ['search.document', 'edit.replace_literal'].includes(definition.id) ? documentContext() : undefined);
+  const handle = action => async (...args) => {
+    try { return await action(...args); } catch (error) { await vscode.window.showErrorMessage('RE35: ' + error.message); }
   };
+  // No default editor key is claimed. Native keybindings.json (or another
+  // extension) can call this stable command with the portable data envelope.
+  context.subscriptions.push(vscode.commands.registerCommand('re35.execute', handle(invoke)));
   context.subscriptions.push(vscode.commands.registerCommand('re35.open', handle(async () => {
     const service = getHost(), core = await service.core();
     const commands = await core.call('search', { query: '', options: { limit: 20 } });
@@ -361,10 +384,10 @@ function activate(context) {
       label: command.name, description: command.id, detail: (definitions.find(item => item.id === command.id) || { path: [] }).path.join(' '), id: command.id,
       optionalPresentation: { details: true, status: true }
     })), { title: 'RE35', placeHolder: 'Search commands; existing editor keys remain available before entry' }, { optionalHelp: true });
-    if (chosen) await actions[chosen.id]();
+    if (chosen) await invoke({ command: chosen.id });
   })));
-  context.subscriptions.push(vscode.commands.registerCommand('re35.searchDocument', handle(actions['search.document'])));
-  context.subscriptions.push(vscode.commands.registerCommand('re35.replaceLiteral', handle(actions['edit.replace_literal'])));
+  context.subscriptions.push(vscode.commands.registerCommand('re35.searchDocument', handle(() => invoke({ command: 'search.document' }))));
+  context.subscriptions.push(vscode.commands.registerCommand('re35.replaceLiteral', handle(() => invoke({ command: 'edit.replace_literal' }))));
   context.subscriptions.push(vscode.commands.registerCommand('re35.results', handle(() => getHost().showResults())));
   for (const [name, id] of [['re35.loadProfile', 'settings.profile_import'], ['re35.selectProject', 'workspace.project'], ['re35.projectContext', 'project.inspect'],
     ['re35.presentationSupport', 'settings.presentation_inspect'],
@@ -373,7 +396,7 @@ function activate(context) {
     ['re35.runRecipe', 'project.run_selected_recipe'], ['re35.tasks', 'run.tasks'], ['re35.cancelRecipe', 'run.cancel'],
     ['re35.taskResults', 'run.results'], ['re35.taskRecovery', 'run.task_recovery'], ['re35.searchProject', 'search.project_text'],
     ['re35.projectSearchResults', 'search.project_results'], ['re35.cancelProjectSearch', 'search.cancel']]) {
-    context.subscriptions.push(vscode.commands.registerCommand(name, handle(actions[id])));
+    context.subscriptions.push(vscode.commands.registerCommand(name, handle(() => invoke({ command: id }))));
   }
   context.subscriptions.push(vscode.workspace.registerTextDocumentContentProvider('re35-preview', {
     provideTextDocumentContent(uri) { return host && host.previews.get(uri.toString()) || ''; }
@@ -416,6 +439,6 @@ function activate(context) {
     if (host && host.workflow) host.workflow.invalidateContext();
   }));
   context.subscriptions.push({ dispose() { if (host) host.dispose(); } });
-  return { getHost, Host, capture };
+  return { getHost, Host, capture, execute: invoke };
 }
 module.exports = { activate };

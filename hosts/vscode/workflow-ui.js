@@ -1,6 +1,7 @@
 'use strict';
 // Native workflow views use shared presentation without changing action ownership.
 const vscode = require('vscode');
+const path = require('node:path');
 const { createResultActions } = require('./results-ui');
 const { createTaskActions } = require('./task-ui');
 const { createRecoveryActions } = require('./recovery-ui');
@@ -84,9 +85,12 @@ function createWorkflowActions(getHost) {
     ...resultActions,
     'run.results': () => taskViews(getHost(), { view: 'results' }),
     'run.task_recovery': () => taskViews(getHost(), { view: 'recovery' }),
-    'settings.profile_import': async () => {
+    'settings.profile_import': async (args = {}) => {
       const host = getHost();
-      const files = await vscode.window.showOpenDialog({ title: 'RE35: Load Portable Profile', canSelectMany: false,
+      if (Object.hasOwn(args, 'path') && (!path.isAbsolute(args.path) || args.path.includes('\0'))) {
+        throw new Error('Choose an absolute local profile file path');
+      }
+      const files = Object.hasOwn(args, 'path') ? [vscode.Uri.file(args.path)] : await vscode.window.showOpenDialog({ title: 'RE35: Load Portable Profile', canSelectMany: false,
         canSelectFiles: true, canSelectFolders: false, filters: { 'RE35 profile': ['json'] } });
       if (!files || !files.length) return;
       owned(host);

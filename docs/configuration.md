@@ -106,7 +106,11 @@ muted, selected, warning and error roles independently.
 
 Shortcut hints wrap between complete key/description pairs. Details scrolling
 is shown separately from command navigation; the key bindings themselves are
-unchanged.
+unchanged. Descriptions and required facts prefer word boundaries, including
+spaced Korean units. Only tokens wider than a whole row use emergency wrapping;
+long paths can break at path separators. Common combining and emoji sequences
+stay together. This is not full language-specific Unicode line breaking.
+Required-fact measurement and drawing use the same rule after resizing.
 
 The default builtin theme adapter saves confirmed selections to
 `vim.fn.stdpath('state') .. '/re35/theme.json'` and restores them at startup.
@@ -117,21 +121,46 @@ theme and reports the failure. If saving fails, the confirmed theme remains
 applied for the session and the warning stays inspectable. Theme state is
 host-local and is not included in portable profile or UI exports.
 
-The builtin Select theme picker shows the pending Light/Dark appearance,
-automatic-preview state and confirmation scope above the theme list. `Ctrl-b`
-switches Light/Dark; `Ctrl-t` toggles automatic preview without leaving the list.
+The builtin Select theme picker separates Light and Dark choices. A theme that
+supports both appears in both lists; a Light-only theme such as `peachpuff` does
+not normally appear under Dark. `Ctrl-b` switches the list and requested
+appearance; `Ctrl-t` toggles automatic preview without leaving the list.
 These controls are available while not filtering; `Esc` first leaves the filter.
+The picker shows appearance, preview state and Save on confirm / Session only
+scope, including in Minimal. Moving the filter caret or editing a filter without
+changing the selected theme/appearance does not reload that preview.
 Preview starts enabled each time the picker opens. Turning it off restores the
 original theme and appearance; selecting another name then has no editor effect
 until `Enter` confirms it. Confirmation applies and saves that exact theme and
-appearance (or reports why the scheme cannot retain the requested appearance).
-Some schemes support only one appearance: `peachpuff`, for example, selects
-Light. Choose Light with `Ctrl-b` before confirming it. An incompatible choice
-restores the previous theme and appearance and leaves startup storage unchanged.
+appearance. Classification is advisory: if the live theme differs from its cached
+observation, RE35 corrects the list, restores the previous theme/appearance and
+leaves startup storage unchanged. Expected conditions use a short explanation;
+`Ctrl-h` opens full details without losing the input. Actual loading or restoration
+errors remain errors.
 `Esc` cancels both drafts and leaves the previously saved choice unchanged.
 Changing `:set background=light` or `:set background=dark` outside this picker
 affects the editor immediately but does not rewrite saved startup state. Open
 Select theme and confirm when you want to save the current appearance.
+
+Classification starts when the picker opens and runs asynchronously in separate,
+clean Neovim processes. It checks the actual `Normal` background and resulting
+`background` option for each requested appearance. The list fills while Checking
+is shown. Results are
+cached at `vim.fn.stdpath('cache') .. '/re35/theme-catalog-v1.json'`; unchanged
+observations are reused, new/changed themes are inspected and removed themes are
+pruned. Transient process failures are retried on reopening. This cache is separate
+from the saved startup choice and portable profiles.
+
+Workers execute installed theme code using the runtime paths and bounded relevant
+global options, without running your init, copying Lua setup-module state or
+inheriting your `ColorScheme` handlers. Consequently, setup-dependent themes may
+differ from the live editor. Inspection covers at most 256 themes with a two-second
+limit per appearance; it installs nothing. An appearance is listed only after
+successful classification; pending, failed, transparent or unspecified observations
+do not become choices. Status reports unfinished
+or unclassified entries; `Ctrl-h` explains classification problems. A custom theme
+adapter or direct Neovim theme selection remains available for themes this default
+classifier cannot represent.
 
 A supplied `integrations.theme` adapter continues to own its commit, storage
 and startup. RE35 does not automatically call a custom adapter's `restore()`.
@@ -145,32 +174,65 @@ Settings > Getting started (`\sg`) explains controls and storage scope;
 `\sv` inspects integrations for the originating buffer. `:checkhealth re35`
 is also available. Inspection installs no plugins, executables or servers.
 The first manual entry in each editor session offers a brief guide hint;
-`guidance.first_run = false` disables that hint. Editor in the workspace
-selector suspends command navigation and returns to the native editing window.
-From the command tree, the configured Workspaces key (`Ctrl-w` by default) opens
-that selector. Its Editor entry explains that the next plain entry resumes
-navigation. The Close key (`\` by default) resets navigation for the next entry;
-neither action cancels submitted Tasks.
+`guidance.first_run = false` disables that hint. The entry key (`\`), root Back
+and Workspaces > Editor return to editing and preserve safe navigation for the
+next plain entry. `Ctrl-c` or `require('re35').close()` explicitly reset it.
+Neither operation cancels submitted Tasks.
 
-Leave an active workspace before choosing Editor; RE35 keeps its Settings drafts
-and resources intact if suspension is refused. The next plain `\` entry resumes
-the retained navigation with the current buffer and cursor. Forms and reviews
-are rebuilt by selecting their command again; nonsecret drafts remain available,
-secrets and Apply confirmations require new input. Native Normal/Insert/Visual
-modes remain managed by Neovim. An explicit search, command or workspace request
-starts a fresh session instead of resuming the old destination.
+Resume captures the current buffer and cursor. Forms and reviews are rebuilt
+by selecting their command again; nonsecret drafts remain available, while
+secrets and Apply confirmations require new input. Workspace frames and their
+resources are closed, and navigation returns to the workspace selector with
+that workspace selected. Extension workspace drafts are not retained unless
+represented by their declared scalar memory. Apply or discard changed Settings
+drafts before leaving. Native Normal/Insert/Visual behavior remains Neovim's.
+An explicit search, command or workspace request starts a fresh session;
+`invoke()` instead reuses parked navigation with a fresh source context.
 
-If Editor was selected from the workspace selector, resuming returns to that
-selector; press Esc to return to the preceding command tree.
-Ordinary resumption is silent. If you select a command with remembered inputs,
-its new form shows a neutral restoration notice; it still requires a fresh run
-decision, and any secrets or Apply confirmations must be entered again.
+Ordinary resumption is silent. Restoring nonsecret command inputs shows a
+neutral notice in that command's new form. `leave()` and `resume()` expose these
+ordinary transitions. The older `suspend()` API remains strict and refuses live
+workspace stacks. `state()` distinguishes active, suspended and surface_attached.
+If final cleanup fails, `close()` returns false with a reason and retains
+`cleanup_pending` / `cleanup_error` for a retry, without live input authority.
 
-`require('re35').suspend()` and `require('re35').resume()` also expose the
-transitions. `close()` disposes visible or suspended sessions without cancelling
-submitted background tasks. If final resource cleanup fails, it returns `false`
-with a reason; `state().cleanup_pending` and `cleanup_error` retain the diagnostic
-until cleanup can be retried. No live form or input hook is retained for that retry.
+## Commands from editor keys
+
+No editing keys are installed by default. Assign keys explicitly in Neovim:
+
+```lua
+require('re35').setup({
+  editor_keys = {
+    { key = '<F6>', command = 'search.document', args = { query = 'TODO' } },
+    { key = '<F7>', command = 'project.run_selected_recipe', mode = 'n' },
+  },
+})
+```
+
+`mode` defaults to `n`; `x`, `i` or a list of those modes are also supported.
+Bindings are global host configuration, separate from portable profiles and
+command tree locations. Missing commands remain declared and report why they
+cannot run. Loaded buffer-local conflicts, duplicate/prefix bindings and entry
+boundary conflicts reject setup while preserving the previous environment.
+An existing exact global map requires `replace = true`; prefix conflicts cannot
+be replaced. Disable restores displaced maps only if RE35 still owns the slot.
+Later plugin replacements are respected. A later buffer-local map takes
+precedence; inspect current ownership with `editor_keys()` or `:checkhealth re35`.
+
+The equivalent programmatic intent is data only:
+
+```lua
+require('re35').invoke({ command = 'search.document', args = { query = 'TODO' } })
+```
+
+Use an exact stable ID, not an alias, tree path or transient imported map/Ex ID.
+Arguments are copied and validated; unknown fields are rejected. Missing inputs
+open the existing form. Availability, source checks and required reviews remain
+in force; putting `apply = true` in a keybinding is not a reviewed submission.
+Finish or leave an active RE35 surface before invoking an editing shortcut.
+The VS Code host accepts the same intent through `re35.execute`; its actual key
+notation and supported commands belong to that host, as described in its
+[setup guide](../hosts/vscode/README.md).
 
 ## Setup and saved settings
 
@@ -215,7 +277,7 @@ host activation fails, Saved / Reload required distinguishes the disk state
 from the still-active previous environment. The status screen reports the
 storage owner; a theme preview is independent of a Settings draft.
 
-## Updating to 0.3.2
+## Updating to 0.4.0
 
 Keep a backup of your existing profile and configuration. Update RE35 without
 deleting its state directory or replacing the saved profile. Version 1 profiles
@@ -262,6 +324,11 @@ After updating, check these flows in your normal configuration:
   off with `Ctrl-t`. Browse without changing the editor, cancel to restore the
   original pair, then reopen and confirm the exact theme/appearance. Restart to
   check the saved pair.
+- Let the initial theme classification finish, then reopen the picker. Confirm
+  that cached choices return, Light-only schemes stay out of Dark, and both-mode
+  schemes appear in both. Type and erase a filter rapidly; unchanged selections
+  should not repeatedly apply a theme. Inspect any classification problem with
+  Ctrl-h and return to the same picker.
 - Test `PageUp` / `PageDown` in long selection lists, including Select theme
   before and during filtering. Jumps should follow the visible page capacity
   and stop at the ends; single Up/Down steps should retain your wrap setting.
@@ -309,7 +376,7 @@ binding, unbind it first, or deliberately use `replace = true`. On the first
 setup there is no previous environment to preserve: correct the reported entry
 and retry setup. A rejected candidate does not partially activate its commands.
 
-`require('re35').disable()` closes the UI, removes entry/autocommand hooks and
+`require('re35').disable()` closes the UI, removes entry/autocommand hooks and explicitly assigned editing keys, and
 disposes registered extensions. Retained tasks and the API object remain
 available.
 Use task cancellation explicitly when you intend to stop work. Call setup
