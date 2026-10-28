@@ -5,6 +5,7 @@ local M, Lifecycle = {}, {}
 Lifecycle.__index = Lifecycle
 
 local function dispose(env)
+  if env and env.compositions then pcall(env.compositions.dispose,env.compositions) end
   if env and env.extensions then pcall(env.extensions.dispose, env.extensions) end
 end
 
@@ -15,7 +16,14 @@ end
 function Lifecycle:current() return self.environment end
 function Lifecycle:token() return self.identity end
 function Lifecycle:is_current(token) return token ~= nil and token == self.identity end
-function Lifecycle:prepare(opts) return Builder.prepare(opts) end
+function Lifecycle:prepare(opts)
+  local previous=self.environment
+  local seed
+  if previous and previous.compositions and previous.compositions.library.path==false then
+    seed=previous.compositions.library:current()
+  end
+  return Builder.prepare(opts,seed and seed.library)
+end
 function Lifecycle:admit()
   if self.changing then return false, 'Environment lifecycle is already changing: ' .. self.changing end
   if self.environment and self.environment.session.transitioning then return false, 'Session lifecycle is already changing' end

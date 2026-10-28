@@ -21,8 +21,10 @@ import uuid
 
 ROOT = Path(__file__).resolve().parent.parent
 TESTS = ROOT / "tests"
-# Shared data consumed by the inspection fixture; no general JSON discovery.
-FIXTURE_INPUTS = (TESTS / "fixtures" / "presentation-inspection.json",)
+# Explicit shared contract inputs; no general JSON discovery.
+FIXTURE_INPUTS = (TESTS / "fixtures" / "presentation-inspection.json",
+                  TESTS / "fixtures" / "composition-v1.json",
+                  TESTS / "fixtures" / "editing-v1.json")
 
 
 def digest(path: Path) -> str:

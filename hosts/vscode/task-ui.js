@@ -5,10 +5,11 @@ function createTaskActions(getHost) {
   const owned = host => {
     if (host.disposed || getHost() !== host || !vscode.workspace.isTrusted) throw new Error('Task owner changed; open it again');
   };
-  async function startPrepared(host, receipt) {
+  async function startPrepared(host, receipt, guard = () => {}) {
     const tasks = host.workflowService().taskService();
+    const check = () => { owned(host); guard(); };
     try {
-      owned(host);
+      check();
       let decision = { mode: 'run-saved' };
       if (receipt.dirty.length) {
         const choice = await host.presentationService().pick('review', [
@@ -17,20 +18,26 @@ function createTaskActions(getHost) {
           { label: 'Cancel', mode: 'cancel', alwaysShow: true }
         ], { title: 'RE35 Modified Project Inputs', placeHolder: `${receipt.dirty.length} modified project document(s)`, ignoreFocusOut: true },
         { requiredTitle: true });
-        owned(host);
+        check();
         if (!choice || choice.mode === 'cancel') return;
         decision = { mode: choice.mode };
         if (choice.mode === 'save-selected') {
           const files = await host.presentationService().pick('review', receipt.dirty.map(value => ({
             label: value.path, uri: value.uri, picked: true
           })), { title: 'RE35 Save Selected', canPickMany: true, ignoreFocusOut: true }, { requiredTitle: true });
-          owned(host);
+          check();
           if (!files || !files.length) return;
           decision.uris = files.map(value => value.uri);
         }
       }
-      const task = await tasks.start(receipt, decision);
-      owned(host);
+      check();
+      const task = await tasks.start(receipt, decision, check);
+      try { check(); }
+      catch (error) {
+        // A cancellation can arrive while asynchronous admission is settling.
+        // Keep ownership until the returned child confirms its termination.
+        task.cancel(); await task.done; throw error;
+      }
       tasks.showOutput();
       // The task remains owned and inspectable after any native panel closes.
       void task.done.then(result => {

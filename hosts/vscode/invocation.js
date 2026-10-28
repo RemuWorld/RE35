@@ -65,18 +65,34 @@ function validateArguments(definition, args) {
   for (const [name, value] of Object.entries(args)) {
     const field = fields.find(item => item.name === name);
     if (!field) throw new Error(`Command ${definition.id} does not accept argument ${name}`);
-    if (!['text', 'path', 'select'].includes(field.kind) || typeof value !== 'string') {
-      throw new Error(`Argument ${name} must be text`);
+    const kind = field.kind || 'text';
+    if (['text', 'path'].includes(kind) && typeof value !== 'string') throw new Error(`Argument ${name} must be text`);
+    if (kind === 'boolean' && typeof value !== 'boolean') throw new Error(`Argument ${name} must be a boolean`);
+    if (kind === 'number') {
+      if (typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`Argument ${name} must be a finite number`);
+      if (field.integer && !Number.isInteger(value)) throw new Error(`Argument ${name} must be a whole number`);
+      if (field.min !== undefined && value < field.min) throw new Error(`Argument ${name} is below its minimum`);
+      if (field.max !== undefined && value > field.max) throw new Error(`Argument ${name} exceeds its maximum`);
     }
-    if (field.required && !value.length) throw new Error(`Argument ${name} is required`);
-    if (field.kind === 'select' && !field.items.includes(value)) throw new Error(`Argument ${name} is not an available choice`);
+    if (kind === 'multiselect' && !Array.isArray(value)) throw new Error(`Argument ${name} must be a list of choices`);
+    if (field.required && (value === '' || kind === 'multiselect' && !value.length)) throw new Error(`Argument ${name} is required`);
+    if (['select', 'multiselect'].includes(kind) && field.items) {
+      const choices = field.items.map(item => item && typeof item === 'object' ? item.value : item);
+      if ((kind === 'multiselect' ? value : [value]).some(item => !choices.some(choice => choice === item))) {
+        throw new Error(`Argument ${name} is not an available choice`);
+      }
+    }
+    if (!['text', 'path', 'boolean', 'number', 'select', 'multiselect'].includes(kind)) throw new Error(`Unsupported argument kind: ${kind}`);
   }
   // Missing fields deliberately remain missing: the same action prompts for them.
 }
 function createInvoker(getHost, definitions, actions, captureContext = () => undefined) {
   return async value => {
-    const invocation = copyInvocation(value), definition = definitions.find(item => item.id === invocation.command);
-    if (!definition || typeof actions[invocation.command] !== 'function') {
+    const invocation = copyInvocation(value), registry = definitions && typeof definitions.get === 'function' ? definitions : null;
+    const entry = registry && registry.get(invocation.command);
+    const values = registry ? registry.definitions() : typeof definitions === 'function' ? definitions() : definitions;
+    const definition = entry ? entry.descriptor : values.find(item => item.id === invocation.command);
+    if (!definition || (registry ? !entry : typeof actions[invocation.command] !== 'function')) {
       throw new Error(`Command ${invocation.command} is unavailable in this VS Code host`);
     }
     const args = invocation.args || Object.freeze({});
@@ -84,6 +100,7 @@ function createInvoker(getHost, definitions, actions, captureContext = () => und
     const host = getHost(), context = captureContext(definition, args), core = await host.core();
     await core.call('invocation_validate', { invocation });
     if (host.disposed || getHost() !== host || core.closed) throw new Error('Command owner changed before invocation');
+    if (registry) { registry.guard(entry); return registry.invoke(entry, args, context); }
     return actions[invocation.command](args, context);
   };
 }

@@ -1,6 +1,6 @@
 'use strict';
 const assert = require('node:assert/strict');
-const { createInvoker, copyInvocation } = require('../invocation');
+const { createInvoker, copyInvocation, validateArguments } = require('../invocation');
 async function run() {
   let checks = 0, calls = 0, ran = 0, validation;
   const eq = (a, b) => { assert.deepEqual(a, b); ++checks; };
@@ -54,6 +54,17 @@ async function run() {
   eq(ran, beforeRan);
   const proto = JSON.parse('{"command":"search.document","args":{"__proto__":{"query":"unexpected"}}}');
   eq(Object.getPrototypeOf(copyInvocation(proto).args), null);
+  const typed = { id: 'local.typed', arguments: [
+    { name: 'count', kind: 'number', integer: true, min: 0, max: 3 }, { name: 'enabled', kind: 'boolean' },
+    { name: 'choice', kind: 'select', items: [{ label: 'One', value: 1 }, false] },
+    { name: 'many', kind: 'multiselect', required: true, items: ['one', 2, true] }
+  ] };
+  validateArguments(typed, { count: 0, enabled: false, choice: false, many: ['one', true] }); ++checks;
+  for (const [args, pattern] of [[{ count: '1' }, /finite number/], [{ count: 0.5 }, /whole number/], [{ count: -1 }, /minimum/],
+    [{ count: 4 }, /maximum/], [{ enabled: 'false' }, /boolean/], [{ choice: '1' }, /choice/], [{ many: [] }, /required/],
+    [{ many: [false] }, /choice/], [{ many: 'one' }, /list/]]) {
+    assert.throws(() => validateArguments(typed, args), pattern); ++checks;
+  }
   return { passed: true, checks, scope: 'data-only semantic invocation, supplied arguments, unsupported commands and stale owner refusal' };
 }
 if (require.main === module) run().then(value => console.log(JSON.stringify(value))).catch(error => { console.error(error); process.exitCode = 1; });

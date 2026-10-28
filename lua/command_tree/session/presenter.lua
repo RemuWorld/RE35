@@ -192,6 +192,17 @@ function M.attach(self)
         data.items = { { key = ">", name = Text.display(shown, input.cursor), editing_text = shown, editing_cursor = input.cursor } }
       end
       data.help = "Enter Next / Run  ·  Tab Complete  ·  ↑/↓ History  ·  Esc Back"
+      if not input.choices and input.command.input_ui and input.command.input_ui.status then
+        local attachment=state.input_attachment
+        local status=self:input_status()
+        if not self:is_attached(state,attachment) or state.input~=input then return end
+        if status then
+          if status.label and status.label~='' then data.label=status.label end
+          if status.description and status.description~='' then
+            data.details=vim.tbl_extend('force',{},data.details or {},{description=status.description})
+          end
+        end
+      end
       if input.choices then
         -- Built-in controls already know their keys. Keep their structured
         -- identity instead of parsing rendered names such as PgUp/PgDn back

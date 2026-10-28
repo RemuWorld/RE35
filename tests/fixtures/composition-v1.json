@@ -1,0 +1,85 @@
+{
+  "version": 1,
+  "limits": { "bytes": 65536, "commands": 64, "steps": 16, "inputs": 16, "choices": 64 },
+  "manifest": [
+    { "id": "edit.replace_literal", "name": "Replace literal", "arguments": [
+      { "name": "find", "kind": "text", "required": true },
+      { "name": "replace", "kind": "text" }
+    ] },
+    { "id": "search.document", "name": "Search document", "arguments": [
+      { "name": "query", "kind": "text", "required": true }
+    ] },
+    { "id": "project.run_selected_recipe", "name": "Run selected recipe", "arguments": [] },
+    { "id": "project.choose", "name": "Choose configuration", "arguments": [
+      { "name": "configuration", "kind": "select", "required": true, "items": ["Debug", "Release"] },
+      { "name": "optional", "kind": "text" }
+    ] },
+    { "id": "host.flag", "name": "Set flag", "arguments": [{ "name": "enabled", "kind": "boolean" }] }
+  ],
+  "cases": [
+    {
+      "name": "replace_then_find",
+      "definition": { "id": "user.replace_then_find", "name": "Replace and find", "inputs": [
+        { "name": "find", "type": "text", "required": true },
+        { "name": "replace", "type": "text", "required": true }
+      ], "steps": [
+        { "command": "edit.replace_literal", "args": { "find": { "input": "find" }, "replace": { "input": "replace" } } },
+        { "command": "search.document", "args": { "query": { "input": "replace" } } }
+      ] },
+      "inputs": { "find": "items[i].name/한😀é", "replace": "changed / literal" },
+      "resolved": [
+        { "command": "edit.replace_literal", "args": { "find": "items[i].name/한😀é", "replace": "changed / literal" } },
+        { "command": "search.document", "args": { "query": "changed / literal" } }
+      ]
+    },
+    {
+      "name": "recipe_then_find",
+      "definition": { "id": "user.recipe_then_find", "name": "Recipe and find", "inputs": [], "steps": [
+        { "command": "project.run_selected_recipe", "args": {} },
+        { "command": "search.document", "args": { "query": { "value": "needle" } } }
+      ] },
+      "inputs": {},
+      "resolved": [
+        { "command": "project.run_selected_recipe", "args": {} },
+        { "command": "search.document", "args": { "query": "needle" } }
+      ]
+    },
+    {
+      "name": "optional_input_omitted",
+      "definition": { "id": "user.configuration", "name": "Configure", "inputs": [
+        { "name": "configuration", "type": "select", "required": true, "choices": ["Debug", "Release"] },
+        { "name": "optional", "type": "text", "required": false }
+      ], "steps": [
+        { "command": "project.choose", "args": { "configuration": { "input": "configuration" }, "optional": { "input": "optional" } } },
+        { "command": "host.flag", "args": { "enabled": { "value": false } } }
+      ] },
+      "inputs": { "configuration": "Debug" },
+      "resolved": [
+        { "command": "project.choose", "args": { "configuration": "Debug" } },
+        { "command": "host.flag", "args": { "enabled": false } }
+      ]
+    },
+    {
+      "name": "optional_input_explicit_empty",
+      "definition": { "id": "user.empty", "name": "Clear optional text", "inputs": [
+        { "name": "optional", "type": "text", "required": false }
+      ], "steps": [
+        { "command": "project.choose", "args": { "configuration": { "value": "Release" }, "optional": { "input": "optional" } } }
+      ] },
+      "inputs": { "optional": "" },
+      "resolved": [{ "command": "project.choose", "args": { "configuration": "Release", "optional": "" } }]
+    }
+  ],
+  "unavailable": { "version": 1, "commands": [
+    { "id": "user.foreign", "name": "A command from another host", "inputs": [], "steps": [
+      { "command": "future.unsupported", "args": { "literal": { "value": "preserve / [] 한😀" } } }
+    ] }
+  ] },
+  "outcomes": [
+    { "name": "observed_success", "outcome": { "status": "succeeded" }, "expected_status": "succeeded", "expected_steps": 2 },
+    { "name": "observed_failure", "outcome": { "status": "failed", "message": "Compiler failed" }, "expected_status": "failed", "expected_steps": 1 },
+    { "name": "observed_cancellation", "outcome": { "status": "cancelled" }, "expected_status": "cancelled", "expected_steps": 1 },
+    { "name": "external_handoff", "outcome": { "status": "handed_off" }, "expected_status": "handed_off", "expected_steps": 1 },
+    { "name": "no_completion_contract", "outcome": null, "expected_status": "handed_off", "expected_steps": 1 }
+  ]
+}

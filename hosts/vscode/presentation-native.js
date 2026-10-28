@@ -3,12 +3,14 @@
 // Native widget lifetime is separate from appearance and command ownership.
 // Projected rows are display data; only this view's original references return.
 class NativeView {
-  constructor({ ui, kind, projection, verifyOwner, onMode, onInspect }) {
+  constructor({ ui, kind, projection, verifyOwner, onMode, onInspect, onCheckpoint }) {
     if (!ui || !ui.window || !['pick', 'input'].includes(kind) || typeof verifyOwner !== 'function'
-      || (onMode !== undefined && typeof onMode !== 'function') || (onInspect !== undefined && typeof onInspect !== 'function')) {
+      || (onMode !== undefined && typeof onMode !== 'function') || (onInspect !== undefined && typeof onInspect !== 'function')
+      || (onCheckpoint !== undefined && typeof onCheckpoint !== 'function')) {
       throw new Error('Native presentation requires a widget kind and owner check');
     }
     this.ui = ui; this.kind = kind; this.verifyOwner = verifyOwner; this.onMode = onMode || null; this.onInspect = onInspect || null; this.modePending = false;
+    this.onCheckpoint = onCheckpoint || null;
     this.widget = null; this.listeners = []; this.pending = new Set();
     this.started = false; this.done = false; this.projecting = false;
     this.gesture = 0; this.accepting = false; this.validationSerial = 0;
@@ -243,6 +245,15 @@ class NativeView {
   }
   finish(value, error) {
     if (this.done) return;
+    if (!error && this.widget && this.onCheckpoint) {
+      try {
+        // A view whose workflow owner expired cannot write a navigation draft.
+        // Consume original row references synchronously, before disposing them.
+        this.verifyOwner();
+        this.onCheckpoint({ value: this.widget.value, accepted: value !== undefined,
+          ...(this.kind === 'pick' ? { activeItems: this.owned(this.widget.activeItems).map(row => row.original) } : {}) });
+      } catch (_) { /* Optional navigation must never prevent native retirement. */ }
+    }
     this.done = true; this.terminalError = error; ++this.gesture; ++this.validationSerial; this.pending.clear();
     for (const listener of this.listeners.splice(0)) { try { listener.dispose(); } catch (_) {} }
     const widget = this.widget; this.widget = null;
@@ -250,7 +261,7 @@ class NativeView {
     this.validation = null; this.validationRunning = null;
     // A caller's unresolved validator cannot keep task receipts or a host/profile
     // owner alive through this already-retired controller.
-    this.projection = null; this.ui = null; this.verifyOwner = null; this.onMode = null; this.onInspect = null;
+    this.projection = null; this.ui = null; this.verifyOwner = null; this.onMode = null; this.onInspect = null; this.onCheckpoint = null;
     const reject = this.reject, resolve = this.resolve; this.reject = null; this.resolve = null;
     if (reject && error) reject(error); else if (resolve) resolve(value);
   }

@@ -17,7 +17,7 @@ local defaults = {
     timeline_stay_open = true },
   workspaces = { presentation = "color+name+icon", definitions = {} },
   usage = { max_recent = 50 }, preferences = {}, integrations = {}, profile = {}, tool_overrides = {}, project_overrides = {}, extensions = {}, quick_slots = true, commands = {}, bindings = {},
-  triggers = {}, editor_keys = {},
+  triggers = {}, editor_keys = {}, compositions = {},
   process_helper = false,
 }
 local function mapping_keys(value, name)
@@ -40,6 +40,11 @@ local function validate_options(options)
   local modes = { n = true, v = true, x = true, s = true, o = true, i = true, l = true, c = true, t = true, [""] = true, ["!"] = true }
   for _, name in ipairs({ "commands", "bindings", "triggers", "auto_modes", "extensions" }) do list(options[name], name) end
   require('command_tree.editor_keys').validate(options.editor_keys, options.open_key)
+  assert(type(options.compositions)=='table','compositions must be a table')
+  for key in pairs(options.compositions) do assert(key=='path','Unknown compositions option: '..tostring(key)) end
+  local library_path=options.compositions.path
+  assert(library_path==nil or library_path==false or type(library_path)=='string' and library_path~='' and not library_path:find('\0',1,true),
+    'compositions.path must be a file path or false')
   assert(type(options.project_overrides) == 'table', 'project_overrides must be a table')
   assert(options.process_helper == nil or options.process_helper == false or type(options.process_helper) == 'string'
     and options.process_helper ~= '' and not options.process_helper:find('\0', 1, true),

@@ -39,6 +39,7 @@ class PresentationService {
   }
   profile() { return this.owner.workflow ? this.owner.workflow.profile.current() : null; }
   checkOwner(frame) {
+    if (this.owner.uiEpoch !== frame.uiEpoch) throw Object.assign(new Error('The previous command view was replaced'), { code: 'RE35_UI_RETIRED' });
     if (this.disposed || this.owner.disposed || frame.core.closed || this.owner.backend !== frame.core
       || this.profile() !== frame.profile || !this.ui.workspace.isTrusted) {
       throw new Error('Presentation owner or profile changed; reopen the view');
@@ -50,8 +51,8 @@ class PresentationService {
   }
   async frame() {
     if (this.disposed || this.owner.disposed || !this.ui.workspace.isTrusted) throw new Error('Presentation owner is unavailable');
-    const profile = this.profile(), core = await this.owner.core();
-    const frame = { profile, core, revision: this.revision }; this.check(frame); return frame;
+    const profile = this.profile(), uiEpoch = this.owner.uiEpoch, core = await this.owner.core();
+    const frame = { profile, core, revision: this.revision, uiEpoch }; this.check(frame); return frame;
   }
   fallbackCollection(frame) {
     this.checkOwner(frame);
@@ -162,7 +163,7 @@ class PresentationService {
     if (!scenes.has(scene)) throw new Error('Unknown presentation scene');
     const frame = await this.frame();
     await this.ensureAuthored(frame); this.check(frame);
-    if (!this.epoch || this.epoch.core !== frame.core || this.epoch.profile !== frame.profile || this.epoch.revision !== frame.revision) {
+    if (!this.epoch || this.epoch.core !== frame.core || this.epoch.profile !== frame.profile || this.epoch.revision !== frame.revision || this.epoch.uiEpoch !== frame.uiEpoch) {
       this.epoch = frame; this.cache.clear(); this.inflight.clear();
     }
     const epoch = this.epoch;
@@ -230,12 +231,13 @@ class PresentationService {
   }
   async live(kind, scene, items, options, policy) {
     const serial = ++this.openSerial;
-    const projection = await this.projection(kind, scene, items, options, policy);
+    const memory = this.navigation(kind, scene, items, options, policy);
+    const projection = await this.projection(kind, scene, items, memory ? memory.options : options, policy);
     this.check(projection.frame);
     if (serial !== this.openSerial) throw new Error('A newer native view owns this form');
     const record = { kind, scene, items: items && items.slice(), options: { ...options }, policy: { ...policy }, frame: projection.frame, generation: 0 };
     const view = new NativeView({ ui: this.ui, kind, projection, verifyOwner: () => this.checkOwner(record.frame),
-      onMode: () => this.cycle(scene, record), onInspect: () => this.inspect(record) });
+      onMode: () => this.cycle(scene, record), onInspect: () => this.inspect(record), ...(memory ? { onCheckpoint: memory.checkpoint } : {}) });
     record.view = view;
     // Native Quick Input has one visible surface. Opening a new owned form
     // cancels its predecessor rather than retaining hidden pending reviews.
@@ -244,12 +246,19 @@ class PresentationService {
     try { return await view.show(); }
     finally { view.dispose(); if (this.active === record) this.active = null; }
   }
+  navigation(kind, scene, items, options, policy) {
+    // Review/Task/Result facts and confirmations never become session drafts.
+    if (!policy.remember || !['tree', 'search', 'input'].includes(scene) || options.password || options.canPickMany
+      || !this.owner.navigation || typeof this.owner.navigation.open !== 'function') return null;
+    return this.owner.navigation.open(policy.remember, kind, items, options);
+  }
   async pick(scene, items, options = {}, policy = {}) {
     if (!Array.isArray(items) || items.some(item => !item || typeof item !== 'object' || typeof item.label !== 'string' || !item.label)) {
       throw new Error('Native presentation requires labelled item objects');
     }
     if (typeof this.ui.window.createQuickPick === 'function') return this.live('pick', scene, items, options, policy);
-    const { frame, model, native } = await this.view(scene, options, policy);
+    const memory = this.navigation('pick', scene, items, options, policy);
+    const { frame, model, native } = await this.view(scene, memory ? memory.options : options, policy);
     if (scene === 'review') this.facts.content(items, options.title);
     const originals = new Map(), display = items.map(item => {
       const copy = { ...item }, optional = item.optionalPresentation || {};
@@ -269,15 +278,19 @@ class PresentationService {
       if (!Array.isArray(chosen) || new Set(chosen).size !== chosen.length) throw new Error('Native multiselection is invalid');
       return chosen.map(original);
     }
-    return original(chosen);
+    const selected = original(chosen);
+    if (memory) memory.checkpoint({ value: native.value || '', activeItems: [selected], accepted: true });
+    return selected;
   }
   async input(scene, options = {}, policy = {}) {
     if (scene !== 'input') throw new Error('Text input must use the input presentation scene');
     if (typeof this.ui.window.createInputBox === 'function') return this.live('input', scene, null, options, policy);
-    const { frame, native } = await this.view(scene, options, policy);
+    const memory = this.navigation('input', scene, null, options, policy);
+    const { frame, native } = await this.view(scene, memory ? memory.options : options, policy);
     // The question, validation, focus and ordinary text editing remain host-owned.
     const result = await this.ui.window.showInputBox(native); this.check(frame);
     if (result !== undefined && typeof result !== 'string') throw new Error('Native input returned an invalid value');
+    if (memory && result !== undefined) memory.checkpoint({ value: result, accepted: true });
     return result;
   }
   dispose() {

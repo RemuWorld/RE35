@@ -1,69 +1,64 @@
-# Compatibility and limitations
+# Compatibility and limits
 
-## RE35 0.4.0
+RE35 0.5.0 targets Windows x64 desktop VS Code and trusted local
+workspaces. The platform VSIX includes its helper and Lua runtime. Other desktop
+packages, Remote, web and virtual workspaces are outside this release's scope.
+An installation requirement is not evidence that every supported VS Code version
+or optional extension combination has been tested.
 
-The primary Neovim host requires **Neovim 0.11 or newer** on Windows or Linux.
-It uses Lua source directly and does not require another plugin, a compiler or
-a language server to open the command environment. Optional commands require
-their configured tools or adapters; unavailable capabilities show a reason.
+## Input and interface
 
-Confirmed builtin theme choices persist by default; preview does not save.
-`theme.persist = false` opts out. Custom theme adapters own their storage and
-startup behavior. Existing profile and shared contract versions are unchanged.
-Builtin Light/Dark lists use asynchronous cached observations from separate
-Neovim processes. These workers execute installed theme code without user init
-or Lua setup-module state. Setup-dependent, transparent or unspecified themes
-can be omitted; Ctrl-h exposes classification problems. This host-local picker
-feature does not change the portable core or add GUI theme support.
+- Ordinary VS Code writing, selection and Undo/Redo are the baseline. RE35 does
+  not require Vim modes or implement its own text editor.
+- Contextual input and function-key rules require explicit activation, one local
+  file and one cursor/selection. Active vscode-neovim or VSCodeVim blocks this
+  ordinary input owner; RE35 does not disable another extension automatically.
+- Contextual text/prefix rules and unmodified contributed keys are bounded.
+  General count/operator grammar, arbitrary modified-key capture, recursion and
+  multiple cursors are not implemented.
+- This release uses native forms and diff controls. The custom code-visible UI
+  is on hold; the separate-tab prototype is not the selected interface.
+- Physical IME, shortcut priority, focus/resize and accessibility require actual
+  installed testing. API or controlled-event tests do not establish those results.
+  The release notes identify completed checks and remaining cases.
 
-See [configuration](configuration.md) for saved-profile precedence and adapter
-setup, and [command coverage](command-coverage.md) for the implemented operations.
+Neovim code and definitions remain historical material without future support
+or compatibility commitments. Existing `edit.*` IDs are not reinterpreted as
+ordinary `editor.*` actions. Use the documentation at
+[`v0.4.0`](https://github.com/RemuWorld/RE35/tree/v0.4.0) for that implementation.
 
-Optional `editor_keys` are Neovim-global host configuration and are not exported
-in portable profiles. Only explicitly declared Normal/Visual/Insert shortcuts
-are claimed. Later buffer-local mappings can shadow them. The shared invocation
-envelope carries command IDs/arguments, not editor key syntax or execution
-permission. Existing custom commands lacking a required final boolean Apply
-field cannot use direct `invoke()` when they declare `explicit_apply`.
+## Documents
 
-## Other hosts
+Current-document search/replacement is single-line, case-sensitive and literal.
+It does not support regex, multiline matches or replacement expressions.
 
-The optional [VS Code desktop host](../hosts/vscode/README.md) is a source
-development extension. It requires a separately built native helper and an
-explicit Lua runtime. It supports document search/replacement, profiles, project
-recipes, Tasks/Results, original-task recovery and presentation preferences.
-It is not a complete port of Neovim workspaces, LSP, Git or editor behavior.
-Web and remote extension hosts are outside the documented scope.
+| Boundary | Supported limit |
+| --- | --- |
+| Small document path | 2,000 lines / 256 KiB of UTF-8 line content |
+| Paged document path | 10,000 lines / 1 MiB of UTF-8 line content |
+| Paged line/page | 64 KiB per line; 256 complete lines / 64 KiB per page |
+| Paged retained search locations | 200, with an explicit truncation notice |
+| Paged replacement | 4,096 edits / 512 KiB compact plan / 1 MiB output |
+| Processing | 5 seconds per paged processing stage |
 
-The [C ABI and console examples](portable-core.md) demonstrate embedding the
-shared core. They are not complete editor hosts or prebuilt applications.
+Line separators do not count toward content bytes. Exact encoded transport
+limits still apply, so a smaller document may be refused if its escaped plan or
+request exceeds another quota. A failed, stale or incomplete page never permits
+a partial replacement. Apply does not implicitly save. See
+[core contracts](reference/core-contracts.md#documents).
 
-## Known limitations
+## Projects, execution and storage
 
-- Default theme classification inspects at most 256 themes and allows two seconds
-  per appearance. Initial lists can be incomplete while checking. Cached results
-  are advisory; live application can reject and correct an outdated observation.
-  Custom adapters can own selection for themes the default classifier omits.
-- Text wrapping preserves common combining, Hangul and emoji sequences, but does
-  not implement every Unicode grapheme or language-specific line-break rule.
-- Document search and replacement are single-line, case-sensitive literal
-  operations within the [Document v1/v2 limits](document-v2.md). Replacement
-  requires explicit review and leaves the source unchanged on a stale plan or
-  quota refusal. It does not implicitly save a document.
-- Builtin project search is bounded and does not implement every ripgrep option.
-  Optional providers have different capabilities; partial results remain partial.
-  See [file search](file-search.md) and [search providers](search-providers.md).
-- Direct process cancellation does not promise termination of every descendant.
-  Optional process-group ownership has a defined scope; detached daemons and
-  services remain outside it. See [process ownership](development/process-ownership.md).
-- Host-native controls may fall back when they cannot represent a presentation
-  preference. Unsupported declarations are retained rather than silently removed.
-- VS Code document-search latency remains under investigation. Performance and
-  physical UI behavior vary by host and runtime; the development host is not
-  advertised as a stable replacement for its editor's builtin tools.
-- A complete Ex successor, debugger workflow, JetBrains host and native editing
-  grammar are not implemented.
+Builtin project search is bounded, literal and case-sensitive; it does not read
+ignore files. Optional ripgrep differs in syntax, ignore policy and limits.
+Saved-file search does not include unsaved editor text. Partial results remain
+partial. See [workflow data](reference/workflow-data.md#project-search).
 
-Report a problem with the RE35 version, host/runtime, a minimal reproduction and
-any relevant optional integration. Remove personal paths or other sensitive data
-from shared logs. See [contributing](../CONTRIBUTING.md).
+Compositions are not atomic transactions or one Undo. Cancellation does not roll
+back completed effects. An admitted but unconfirmed edit needs inspection before
+retry. Process cancellation guarantees depend on the reported direct-child or
+owned-scope backend; detached services are excluded.
+
+Portable profiles, saved commands, input definitions and live execution history
+are different data. An imported definition does not supply missing host support
+or grant execution approval. See [customization](customization.md#state-and-history).

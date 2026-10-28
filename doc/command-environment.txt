@@ -23,9 +23,9 @@ The Neovim plugin needs no native helper or compiler for these commands.
 Document identity, revision, encoding and content are revalidated. Changed
 sources and inconsistent replacement plans are rejected; the host owns review
 authorization and retains the reviewed arguments or plan.
-See |ce-document|, docs/host-contracts.md and docs/command-coverage.md.
+See |ce-document|, https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/host-contracts.md and https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/command-coverage.md.
 The optional VS Code host supports a subset of the Neovim environment.
-Version 0.4.0. See docs/compatibility.md for host support and known limitations.
+Version 0.4.0. See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/compatibility.md for host support and known limitations.
 
 OWNERSHIP AND PERSISTENCE                                *ce-ownership* *ce-v5.3*
 
@@ -35,7 +35,7 @@ Rejected workspace Back preserves its return route. Stale Settings reopen is
 discarded after environment replacement or Disable.
 Host activation failure keeps the previous environment and running tasks. When
 a profile write already succeeded, the error explains that Reload is required.
-See docs/recovery-workflow.md and docs/compatibility.md.
+See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/recovery-workflow.md and https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/compatibility.md.
 
 COMMAND LABELS AND REPORTS                               *ce-reports* *ce-v5.2*
 
@@ -49,7 +49,7 @@ Tasks f cycles All / Failed + cancelled / Pending; p previews diagnostics.
 Inside a report, o explicitly toggles bounded output, Enter chooses a destination,
 and a second Enter saves the exact reviewed snapshot without overwriting.
 Arguments, output, raw errors, paths, environment and history are excluded by
-default. Up/Down scrolls; Back returns to Tasks. See docs/configuration.md.
+default. Up/Down scrolls; Back returns to Tasks. See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/configuration.md.
 
 NEOVIM USABILITY                                        *ce-0.2*
 
@@ -136,7 +136,7 @@ step ownership. Failure/cancellation stops later steps. Parent and child Tasks
 retain results. examples/cpp-cmake-recipe.json is a portable declaration for
 an existing CMake/CTest project; import preview does not install or run tools.
 examples/re35-development.json runs this checkout's regression and meaningful
-native validation. See docs/development/self-development.md for host tools.
+native validation. See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/development/self-development.md for host tools.
 Its re35_native_targets project builds/validates ce_cpp or ce_stdio separately
 with host/configuration-isolated caches. Project shows observed recipe progress
 and original-choice Task/Results/retry actions. Results t returns to its owning
@@ -151,13 +151,13 @@ Git is absent by default. Explicitly enabled, \g opens status/diff and reviewed
 whole-file stage/unstage. Closing UI, requesting cancellation and disposing an
 extension have distinct effects. Late results stay in Tasks while stale UI
 updates are rejected. Conflicts, renames, submodules and clean filters have
-explicit file-action limitations. See docs/extensions-v1.md.
+explicit file-action limitations. See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/extensions-v1.md.
 
 lua/command_environment/core contains a pure Lua 5.1 command data model and a
 minimum request engine. Neovim keeps rendering, input, LSP, History, persistence
 and processes in command_tree. An optional C ABI embeds the same Lua sources
 for C++/C# console hosts; Neovim does not need a compiler, .NET or native DLL.
-See docs/portable-core.md, docs/project-recipes.md and docs/file-search.md.
+See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/portable-core.md, https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/project-recipes.md and https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/file-search.md.
 
 RE35 opens at its entry boundary (default \ in Normal/Visual) or through
 explicitly configured editor_keys. No editing shortcuts are assigned by default.
@@ -253,7 +253,7 @@ the live workflow owner remain in place. Information rows are inspectable;
 execution or Apply requires an explicit action. Native geometry, colors and
 icons retain reported host fallbacks. Neovim's existing saved mode selection and
 session-only cycling during a pending Settings draft are unchanged.
-See docs/presentation-presets.md and docs/compatibility.md.
+See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/presentation-presets.md and https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/compatibility.md.
 
 Important paths (after \):
   fs fo fr          Save / open / recent files
@@ -460,7 +460,7 @@ unknown. An explicit absolute process_helper path enables a Windows Job or
 Linux anchored group. Assignment/ownership precedes tool execution; completion
 reports observed scope termination. Deliberately detached daemons/services are
 excluded. A missing configured helper refuses execution without downgrading.
-See docs/development/process-ownership.md. Local tool_overrides
+See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/development/process-ownership.md. Local tool_overrides
 may set positive timeout_ms/cancel_grace_ms values. These are local settings.
 Completed records can be
 reopened; result text is bounded
@@ -721,11 +721,11 @@ HOST SUPPORT AND LIMITS                    *ce-compatibility* *ce-validation*
 
 Neovim is the primary host. The optional VS Code desktop host supports a
 documented subset, and native console examples demonstrate core embedding.
-See docs/compatibility.md for requirements and known limitations, and
-docs/command-coverage.md for supported workflows.
+See https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/compatibility.md for requirements and known limitations, and
+https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/command-coverage.md for supported workflows.
 
 The optional Git workspace has explicit file-action limits;
-see docs/extensions-v1.md. Complete debugger workflows and universal Ex
+see https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/extensions-v1.md. Complete debugger workflows and universal Ex
 replacement are future work. Optional integrations require their configured
 tools or plugins; discovery does not install them.
 
@@ -761,7 +761,7 @@ also fit the unchanged 1 MiB transport bound. Processing has a five-second
 budget per stage, checked at page boundaries. Incomplete search is explicitly
 reported; incomplete or over-budget replacement is refused without an edit.
 No regex or multiline semantics are added. The public Document.snapshot API
-remains v1; docs/document-v2.md defines the additive contract.
+remains v1; https://github.com/RemuWorld/RE35/blob/v0.4.0/docs/document-v2.md defines the additive contract.
 Coordinates are zero-based and end-exclusive in an explicit utf-8/utf-16/utf-32
 unit. Hosts convert them to editor coordinates without splitting a character.
 The core never writes a buffer, file or undo history by itself.

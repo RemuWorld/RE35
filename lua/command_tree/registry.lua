@@ -181,7 +181,7 @@ function Registry:register(spec)
   if spec.type ~= nil then nonempty(spec.type, "Command type") end
   if spec.workspace ~= nil then nonempty(spec.workspace, "Workspace ID") end
   if spec.session_action ~= nil then
-    assert(vim.tbl_contains({ "search", "recent", "favorites", "keymaps", "workspaces", "density", "words", "inspect", "selected_recipe", "ui_import", "presentation_import" }, spec.session_action),
+    assert(vim.tbl_contains({ "search", "recent", "favorites", "keymaps", "workspaces", "density", "words", "inspect", "selected_recipe", "ui_import", "presentation_import", "composition" }, spec.session_action),
       "Unknown session action")
   end
   local targets = (spec.run and 1 or 0) + (spec.workspace and 1 or 0) + (spec.session_action and 1 or 0)

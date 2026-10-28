@@ -54,7 +54,7 @@ function M.attach(self, dispatch_submission)
   end
   function self:input_status()
     local state, input = self.active, self.active and self.active.input
-    if not input or input.callback or not input.choices then return nil end
+    if not input or input.callback then return nil end
     if not current_control(state, input, input.command, input_context(state)) then return nil end
     local status = control_call(state, input, 'status', vim.deepcopy(field_value(input)))
     if not status then return nil end

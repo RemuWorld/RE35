@@ -36,6 +36,7 @@ def main() -> int:
     parser.add_argument('--report', required=True, type=Path)
     parser.add_argument('--timeout', type=float, default=150)
     parser.add_argument('--invocation-only', action='store_true', help='Run only semantic invocation and real editor-bound command checks')
+    parser.add_argument('--command-library', type=Path, help='An inert JSON library exported by the Neovim host for interoperability checks')
     args = parser.parse_args()
     if args.node and (not args.node.is_absolute() or not args.node.is_file()):
         parser.error('node must be an already installed absolute executable')
@@ -43,6 +44,8 @@ def main() -> int:
         parser.error('process-helper must be an already built absolute executable')
     if args.ripgrep and (not args.ripgrep.is_absolute() or not args.ripgrep.is_file()):
         parser.error('ripgrep must be an already installed absolute executable')
+    if args.command_library and (not args.command_library.is_absolute() or not args.command_library.is_file()):
+        parser.error('command-library must be an existing absolute JSON file')
     recipe_values = [args.recipe_checkout, args.cmake, args.ninja, args.cc, args.cxx]
     if any(recipe_values) and not all(recipe_values):
         parser.error('recipe-checkout, cmake, ninja, cc and cxx must be supplied together')
@@ -64,7 +67,9 @@ def main() -> int:
     source_root = folder / 'source'
     sources = [*sorted((ROOT / 'lua').rglob('*.lua')), *sorted((ROOT / 'hosts/vscode').glob('*.js')),
                ROOT / 'hosts/vscode/package.json', *sorted((ROOT / 'hosts/vscode/test').glob('*.js')),
-               ROOT / 'tests/fixtures/presentation-inspection.json']
+               *sorted((ROOT / 'hosts/vscode/runtime').glob('*.lua')),
+               ROOT / 'tests/fixtures/presentation-inspection.json', ROOT / 'tests/fixtures/composition-v1.json',
+               ROOT / 'tests/fixtures/editing-v1.json']
     hashes = {}
     for source in sources:
         relative = source.relative_to(ROOT)
@@ -96,6 +101,12 @@ def main() -> int:
     environment.update(RE35_HOST_TEST_DIR=str(workspace), RE35_TEST_HELPER=str(native / args.helper.name),
                        RE35_TEST_LUA_RUNTIME=str(args.lua_runtime), RE35_TEST_CORE=str(source_root / 'lua'))
     environment.pop('RE35_TEST_NODE', None)
+    environment.pop('RE35_TEST_COMMAND_LIBRARY', None)
+    library_input = None
+    if args.command_library:
+        library_input = folder / 'neovim-command-library.json'
+        library_input.write_bytes(args.command_library.read_bytes())
+        environment['RE35_TEST_COMMAND_LIBRARY'] = str(library_input)
     environment.pop('RE35_TEST_PROCESS_HELPER', None)
     environment.pop('RE35_TEST_RIPGREP', None)
     environment.pop('RE35_RECIPE_CHECKOUT', None)
@@ -136,6 +147,8 @@ def main() -> int:
         'lua_runtime_sha256': digest(args.lua_runtime), 'code_executable_sha256': digest(args.code),
         'artifact_directory': folder.relative_to(ROOT).as_posix(), 'physical_gestures_measured': False,
         'recipe_checkout_source_sha256': recipe_hashes}
+    if library_input:
+        report['command_library_sha256'] = digest(library_input)
     if args.process_helper:
         report['process_helper_sha256'] = digest(args.process_helper)
     external_tools = {name: value for name, value in [('node', args.node), ('ripgrep', args.ripgrep), ('cmake', args.cmake),
@@ -160,9 +173,11 @@ def main() -> int:
         report['snapshot_source_unchanged'] = hashes == {name: digest(source_root / name) for name in hashes}
         report['snapshot_binaries_unchanged'] = binaries == {name: digest(native / name) for name in binaries}
         report['external_tools_unchanged'] = report['external_tool_sha256'] == {name: digest(value) for name, value in external_tools.items()}
+        if library_input:
+            report['command_library_unchanged'] = report['command_library_sha256'] == digest(library_input)
         if recipe_hashes:
             report['recipe_checkout_source_unchanged'] = recipe_hashes == {name: digest(args.recipe_checkout / name) for name in recipe_hashes}
-        report['passed'] = code == 0 and sample.get('passed') is True and report['snapshot_source_unchanged'] and report['snapshot_binaries_unchanged'] and report['external_tools_unchanged'] and report.get('recipe_checkout_source_unchanged', True)
+        report['passed'] = code == 0 and sample.get('passed') is True and report['snapshot_source_unchanged'] and report['snapshot_binaries_unchanged'] and report['external_tools_unchanged'] and report.get('recipe_checkout_source_unchanged', True) and report.get('command_library_unchanged', True)
         if not report['passed']:
             report['error'] = sample.get('error', 'Integration host or immutable snapshot verification failed')
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
@@ -171,7 +186,7 @@ def main() -> int:
     with destination.open('x', encoding='utf-8', newline='\n') as stream:
         json.dump(report, stream, ensure_ascii=False, indent=2)
         stream.write('\n')
-    print(json.dumps({key: report.get(key) for key in ['passed', 'fixture', 'error']}, ensure_ascii=False))
+    print(json.dumps({key: report.get(key) for key in ['passed', 'fixture', 'error']}, ensure_ascii=True))
     return 0 if report['passed'] else 1
 
 

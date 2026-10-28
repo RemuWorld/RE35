@@ -1,8 +1,8 @@
 {
   "name": "re35-desktop",
   "displayName": "RE35 Command Environment",
-  "description": "Development host for shared RE35 documents, profiles and sequential project tasks.",
-  "version": "0.4.0",
+  "description": "User-owned commands, reusable compositions and connected results for VS Code.",
+  "version": "0.5.0",
   "publisher": "RemuWorld",
   "license": "Apache-2.0",
   "engines": {
@@ -23,6 +23,7 @@
     "onCommand:re35.execute",
     "onCommand:re35.searchDocument",
     "onCommand:re35.replaceLiteral",
+    "onCommand:re35.editingGuide",
     "onCommand:re35.results",
     "onCommand:re35.loadProfile",
     "onCommand:re35.selectProject",
@@ -37,10 +38,44 @@
     "onCommand:re35.taskRecovery",
     "onCommand:re35.presentationPresets",
     "onCommand:re35.exportPresentation",
-    "onCommand:re35.importPresentation"
+    "onCommand:re35.importPresentation",
+    "onCommand:re35.cancelUserCommand",
+    "onCommand:re35.runUserCommand",
+    "onCommand:re35.userCommandResults",
+    "onCommand:re35.userCommands",
+    "onCommand:re35.inputRules",
+    "onCommand:re35.input.pause",
+    "onCommand:re35.input.resume",
+    "onCommand:re35.commands",
+    "onCommand:re35.newSession",
+    "onCommand:re35.inputHistory",
+    "onCommand:re35.clearInputHistory",
+    "onCommand:re35.commandContexts",
+    "onCommand:re35.contextual.activate",
+    "onCommand:re35.contextual.stop"
   ],
   "contributes": {
     "commands": [
+      {
+        "command": "re35.commandContexts",
+        "title": "RE35: Manage Command Contexts"
+      },
+      {
+        "command": "re35.contextual.activate",
+        "title": "RE35: Enter Command Input"
+      },
+      {
+        "command": "re35.contextual.stop",
+        "title": "RE35: Return to Ordinary Typing"
+      },
+      {
+        "command": "re35.inputHistory",
+        "title": "RE35: Inspect Input History"
+      },
+      {
+        "command": "re35.clearInputHistory",
+        "title": "RE35: Clear Input History"
+      },
       {
         "command": "re35.open",
         "title": "RE35: Open Command Environment"
@@ -56,6 +91,10 @@
       {
         "command": "re35.replaceLiteral",
         "title": "RE35: Preview Literal Replacement"
+      },
+      {
+        "command": "re35.editingGuide",
+        "title": "RE35: Editing Command Guide"
       },
       {
         "command": "re35.results",
@@ -120,6 +159,42 @@
       {
         "command": "re35.importPresentation",
         "title": "RE35: Import Presentation Presets"
+      },
+      {
+        "command": "re35.cancelUserCommand",
+        "title": "RE35: Cancel User Command"
+      },
+      {
+        "command": "re35.runUserCommand",
+        "title": "RE35: Run User Command"
+      },
+      {
+        "command": "re35.userCommandResults",
+        "title": "RE35: User Command Outcomes"
+      },
+      {
+        "command": "re35.userCommands",
+        "title": "RE35: Manage User Commands"
+      },
+      {
+        "command": "re35.inputRules",
+        "title": "RE35: Manage Input Rules"
+      },
+      {
+        "command": "re35.input.pause",
+        "title": "RE35: Pause Editor Input Rules"
+      },
+      {
+        "command": "re35.input.resume",
+        "title": "RE35: Resume Editor Input Rules"
+      },
+      {
+        "command": "re35.commands",
+        "title": "RE35: Browse Commands"
+      },
+      {
+        "command": "re35.newSession",
+        "title": "RE35: Start New Command Session"
       }
     ],
     "configuration": {
@@ -129,19 +204,19 @@
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Absolute path to the separately built ce_stdio executable."
+          "description": "Absolute ce_stdio override. Empty uses the helper included in a platform VSIX, when available."
         },
         "re35.luaRuntime": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Absolute path to a compatible Lua 5.1 ABI runtime library."
+          "description": "Absolute Lua 5.1 ABI runtime override. Empty uses the runtime included in a platform VSIX, when available."
         },
         "re35.corePath": {
           "type": "string",
           "default": "",
           "scope": "machine",
-          "description": "Absolute RE35 Lua directory. Development checkout defaults to ../../lua."
+          "description": "Absolute RE35 Lua directory override. Empty uses the packaged core or ../../lua in a development checkout."
         },
         "re35.projectRoots": {
           "type": "object",
@@ -202,7 +277,7 @@
         },
         "re35.processHelper": {
           "type": "string",
-          "description": "Optional absolute ce_process_scope executable for Windows Job or Linux process-group ownership. Empty uses direct-child scope. A configured unavailable helper is refused without fallback.",
+          "description": "Optional absolute process-scope helper override. Empty uses a bundled helper when available, otherwise direct-child scope. A configured unavailable helper is refused.",
           "scope": "machine",
           "default": ""
         },
@@ -283,7 +358,319 @@
           "when": "false"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "key": "f1",
+        "command": "re35.contextual.key",
+        "args": "F1",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F1"
+      },
+      {
+        "key": "f2",
+        "command": "re35.contextual.key",
+        "args": "F2",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F2"
+      },
+      {
+        "key": "f3",
+        "command": "re35.contextual.key",
+        "args": "F3",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F3"
+      },
+      {
+        "key": "f4",
+        "command": "re35.contextual.key",
+        "args": "F4",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F4"
+      },
+      {
+        "key": "f5",
+        "command": "re35.contextual.key",
+        "args": "F5",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F5"
+      },
+      {
+        "key": "f6",
+        "command": "re35.contextual.key",
+        "args": "F6",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F6"
+      },
+      {
+        "key": "f7",
+        "command": "re35.contextual.key",
+        "args": "F7",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F7"
+      },
+      {
+        "key": "f8",
+        "command": "re35.contextual.key",
+        "args": "F8",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F8"
+      },
+      {
+        "key": "f9",
+        "command": "re35.contextual.key",
+        "args": "F9",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F9"
+      },
+      {
+        "key": "f10",
+        "command": "re35.contextual.key",
+        "args": "F10",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F10"
+      },
+      {
+        "key": "f11",
+        "command": "re35.contextual.key",
+        "args": "F11",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F11"
+      },
+      {
+        "key": "f12",
+        "command": "re35.contextual.key",
+        "args": "F12",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F12"
+      },
+      {
+        "key": "f13",
+        "command": "re35.contextual.key",
+        "args": "F13",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F13"
+      },
+      {
+        "key": "f14",
+        "command": "re35.contextual.key",
+        "args": "F14",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F14"
+      },
+      {
+        "key": "f15",
+        "command": "re35.contextual.key",
+        "args": "F15",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F15"
+      },
+      {
+        "key": "f16",
+        "command": "re35.contextual.key",
+        "args": "F16",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F16"
+      },
+      {
+        "key": "f17",
+        "command": "re35.contextual.key",
+        "args": "F17",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F17"
+      },
+      {
+        "key": "f18",
+        "command": "re35.contextual.key",
+        "args": "F18",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F18"
+      },
+      {
+        "key": "f19",
+        "command": "re35.contextual.key",
+        "args": "F19",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F19"
+      },
+      {
+        "key": "f20",
+        "command": "re35.contextual.key",
+        "args": "F20",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F20"
+      },
+      {
+        "key": "f21",
+        "command": "re35.contextual.key",
+        "args": "F21",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F21"
+      },
+      {
+        "key": "f22",
+        "command": "re35.contextual.key",
+        "args": "F22",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F22"
+      },
+      {
+        "key": "f23",
+        "command": "re35.contextual.key",
+        "args": "F23",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F23"
+      },
+      {
+        "key": "f24",
+        "command": "re35.contextual.key",
+        "args": "F24",
+        "when": "editorTextFocus && re35.contextual.active && re35.contextual.F24"
+      },
+      {
+        "key": "escape",
+        "command": "re35.contextual.key",
+        "args": "Escape",
+      "when": "editorTextFocus && re35.contextual.active && re35.contextual.Escape"
+      },
+      {
+        "key": "backspace",
+        "command": "re35.contextual.key",
+        "args": "Backspace",
+      "when": "editorTextFocus && re35.contextual.active && re35.contextual.Backspace"
+      },
+      {
+        "key": "f1",
+        "command": "re35.input.key",
+        "args": "F1",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F1"
+      },
+      {
+        "key": "f2",
+        "command": "re35.input.key",
+        "args": "F2",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F2"
+      },
+      {
+        "key": "f3",
+        "command": "re35.input.key",
+        "args": "F3",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F3"
+      },
+      {
+        "key": "f4",
+        "command": "re35.input.key",
+        "args": "F4",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F4"
+      },
+      {
+        "key": "f5",
+        "command": "re35.input.key",
+        "args": "F5",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F5"
+      },
+      {
+        "key": "f6",
+        "command": "re35.input.key",
+        "args": "F6",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F6"
+      },
+      {
+        "key": "f7",
+        "command": "re35.input.key",
+        "args": "F7",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F7"
+      },
+      {
+        "key": "f8",
+        "command": "re35.input.key",
+        "args": "F8",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F8"
+      },
+      {
+        "key": "f9",
+        "command": "re35.input.key",
+        "args": "F9",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F9"
+      },
+      {
+        "key": "f10",
+        "command": "re35.input.key",
+        "args": "F10",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F10"
+      },
+      {
+        "key": "f11",
+        "command": "re35.input.key",
+        "args": "F11",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F11"
+      },
+      {
+        "key": "f12",
+        "command": "re35.input.key",
+        "args": "F12",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F12"
+      },
+      {
+        "key": "f13",
+        "command": "re35.input.key",
+        "args": "F13",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F13"
+      },
+      {
+        "key": "f14",
+        "command": "re35.input.key",
+        "args": "F14",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F14"
+      },
+      {
+        "key": "f15",
+        "command": "re35.input.key",
+        "args": "F15",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F15"
+      },
+      {
+        "key": "f16",
+        "command": "re35.input.key",
+        "args": "F16",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F16"
+      },
+      {
+        "key": "f17",
+        "command": "re35.input.key",
+        "args": "F17",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F17"
+      },
+      {
+        "key": "f18",
+        "command": "re35.input.key",
+        "args": "F18",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F18"
+      },
+      {
+        "key": "f19",
+        "command": "re35.input.key",
+        "args": "F19",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F19"
+      },
+      {
+        "key": "f20",
+        "command": "re35.input.key",
+        "args": "F20",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F20"
+      },
+      {
+        "key": "f21",
+        "command": "re35.input.key",
+        "args": "F21",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F21"
+      },
+      {
+        "key": "f22",
+        "command": "re35.input.key",
+        "args": "F22",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F22"
+      },
+      {
+        "key": "f23",
+        "command": "re35.input.key",
+        "args": "F23",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F23"
+      },
+      {
+        "key": "f24",
+        "command": "re35.input.key",
+        "args": "F24",
+        "when": "editorTextFocus && (re35.input.editor || neovim.mode == normal || neovim.mode == visual) && re35.input.F24"
+      },
+      {
+        "key": "escape",
+        "command": "re35.input.cancel",
+        "when": "editorTextFocus && (neovim.mode == normal || neovim.mode == visual) && re35.input.busy"
+      },
+      {
+        "key": "backspace",
+        "command": "re35.input.backspace",
+        "when": "editorTextFocus && (neovim.mode == normal || neovim.mode == visual) && re35.input.busy"
+      }
+    ]
   },
   "scripts": {
     "test:transport": "node test/transport.js"

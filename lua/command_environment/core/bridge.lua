@@ -54,6 +54,30 @@ local function dispatch(op, data)
     document_page_request(data, { invocation = true }, 'Invocation validation request')
     return refusal(require('command_environment.core.invocation').validate(data.invocation))
   end
+  if op == 'editing_normalize' then
+    document_page_request(data, { command=true,args=true }, 'Editing intent')
+    return refusal(require('command_environment.core.editing').normalize(data.command,data.args))
+  end
+  if op == 'editing_guide' then
+    document_page_request(data, { text=true }, 'Editing guide')
+    return require('command_environment.core.editing').guide(data.text)
+  end
+  if op == 'composition_validate' then
+    document_page_request(data, { library = true, definitions = true }, 'Composition validation request')
+    return refusal(require('command_environment.core.composition').validate(data.library, data.definitions))
+  end
+  if op == 'composition_resolve' then
+    document_page_request(data, { definition = true, inputs = true, definitions = true }, 'Composition resolution request')
+    return refusal(require('command_environment.core.composition').resolve(data.definition, data.inputs, data.definitions))
+  end
+  if op == 'input_rules_validate' then
+    document_page_request(data, { profile=true }, 'Input rules validation request')
+    return refusal(require('command_environment.core.input_rules').validate(data.profile))
+  end
+  if op == 'input_rules_inspect' then
+    document_page_request(data, { profile=true,definitions=true,capabilities=true }, 'Input rules inspection request')
+    return refusal(require('command_environment.core.input_rules').inspect(data.profile, data.definitions, data.capabilities))
+  end
   if op == 'profile_capabilities' then
     document_page_request(data, {}, 'Profile capabilities request')
     return { contract_version = 1, profile_version = 1,

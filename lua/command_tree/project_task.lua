@@ -345,6 +345,10 @@ function M.review(operation, command, env, opts, dispatch)
         interactive = opts.interactive == nil and #vim.api.nvim_list_uis() > 0 or opts.interactive })
     end
     if not safe then report(false, tostring(accepted)); return false, tostring(accepted) end
+    if next_operation and type(opts.on_started)=='function' then
+      local observed,why=pcall(opts.on_started,next_operation)
+      if not observed then next_operation.start_observer_error=tostring(why) end
+    end
     if accepted == false then report(false, detail) end
     return accepted, detail, next_operation
   end

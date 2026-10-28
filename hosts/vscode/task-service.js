@@ -118,14 +118,21 @@ class TaskService {
     const fresh = await Inputs.capture(authority.selected.context.root, authority.selected.context.source, authority.check);
     if (!Inputs.same(authority.inputs, fresh)) throw new Error('Task files or editor inputs changed; choose Run again');
   }
-  async start(receipt, decision) {
+  async start(receipt, decision, guard = () => {}) {
     return this.owner.exclusive(async () => {
       const authority = receipt && this.receipts.get(receipt);
       if (!authority || this.pending !== receipt || this.active || this.disposed) throw new Error('Task admission is not owned by this host');
+      if (typeof guard !== 'function') throw new Error('Task admission guard must be a function');
+      const priorCheck = authority.check;
+      // A composed command adds its lifetime to the existing file, project,
+      // core and admission checks. This same guard reaches saveSelected and
+      // beforeSpawn, so cancelling a pending review cannot start later work.
+      authority.check = () => { priorCheck(); guard(); };
       this.pending = null; // One-use even when saving/admission fails.
       this.receipts.delete(receipt);
       let request, savedPaths = [];
       try {
+        authority.check();
         if (!decision || !['run-saved', 'save-selected'].includes(decision.mode)
           || Object.keys(decision).some(name => !['mode', 'uris'].includes(name))) throw new Error('Choose Run saved inputs, Save selected, or Cancel');
         if (decision.mode === 'run-saved' && decision.uris !== undefined) throw new Error('Run saved inputs does not save documents');

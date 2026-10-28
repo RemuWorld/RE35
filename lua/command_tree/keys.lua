@@ -58,14 +58,16 @@ function M.context(mode)
     document_uri = M.document_uri(vim.api.nvim_get_current_buf()),
   }
   local raw_mode = vim.api.nvim_get_mode().mode
+  ctx.raw_mode = raw_mode
   if ctx.mode == "x" then
     local start, finish = vim.fn.getpos("v"), vim.fn.getpos(".")
+    local anchor = { start[2], math.max(0, start[3] - 1) }
     if start[2] > finish[2] or (start[2] == finish[2] and start[3] > finish[3]) then start, finish = finish, start end
     if raw_mode == "V" then
       start[3] = 1
       finish[3] = #(vim.api.nvim_buf_get_lines(ctx.buf, finish[2] - 1, finish[2], false)[1] or "") + 1
     end
-    ctx.selection = { start = { start[2], math.max(0, start[3] - 1) },
+    ctx.selection = { anchor = anchor, start = { start[2], math.max(0, start[3] - 1) },
       finish = { finish[2], math.max(0, finish[3] - 1) }, mode = raw_mode, exclusive = vim.o.selection == "exclusive" }
   end
   return ctx

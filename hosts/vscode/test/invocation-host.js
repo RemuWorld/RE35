@@ -20,12 +20,28 @@ async function run({ api, options }) {
     for (const name of names) await config.update(name, options[name], vscode.ConfigurationTarget.Global);
     host = api.getHost();
     const presentation = host.presentationService();
-    let inputs = 0, reviews = 0, apply = false;
+    const core = await host.core();
+    const indexed = await core.call('search', { query: '', options: { limit: 64 } });
+    assert(indexed.length > 0 && indexed.every(row => row.command && typeof row.command.name === 'string'),
+      'The actual core returns indexed rows containing command definitions'); ++checks;
+    let inputs = 0, reviews = 0, apply = false, trees = 0, treeItems;
     presentation.input = async () => { ++inputs; return 'replacement'; };
     presentation.pick = async (scene, items) => {
       if (scene === 'review') { ++reviews; return items.find(item => item.apply === apply); }
+      if (scene === 'tree') {
+        ++trees;
+        treeItems = items;
+      }
       return undefined;
     };
+    await timed(vscode.commands.executeCommand('re35.open'), 'main command tree');
+    eq(trees, 1); // A projection error before the picker must not pass silently.
+    // Discovery has its own declared presentation order. Identity and names
+    // still match the core index without inheriting its empty-query ranking.
+    const registeredRows = treeItems.filter(item => indexed.some(row => row.id === item.id));
+    eq(registeredRows.map(item => [item.id, item.label]).sort(),
+      indexed.map(row => [row.id, row.command.name]).sort());
+    eq(treeItems.every(item => typeof item.label === 'string' && item.label.trim().length > 0), true);
     const document = await vscode.workspace.openTextDocument({ content: '한글😀 items[i].name items[i].name', language: 'plaintext' });
     await vscode.window.showTextDocument(document, { preview: false });
     await timed(vscode.commands.executeCommand('re35.execute', { command: 'search.document', args: { query: 'items[i].name' } }), 'search binding');
@@ -47,7 +63,7 @@ async function run({ api, options }) {
     await assert.rejects(api.execute({ command: 'search.document', args: { ignored: true } }), /does not accept/); ++checks;
     await assert.rejects(api.execute({ command: 'search.document', args: { query: 4 } }), /must be text/); ++checks;
     eq(host.review, null);
-    const core = await host.core(), call = core.call.bind(core);
+    const call = core.call.bind(core);
     const editor = await vscode.window.showTextDocument(document, { preview: false });
     core.call = async (operation, data) => {
       const result = await call(operation, data);

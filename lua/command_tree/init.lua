@@ -62,6 +62,35 @@ function M.editor_keys()
   return require('command_tree.editor_keys').status()
 end
 
+-- Libraries contain declarations only; execution uses the same Session entry
+-- as tree selection and editing shortcuts. Receipts stay inside this host.
+function M.command_library() return get().compositions.library:current() end
+function M.save_command_library(value,revision)
+  local admitted,why=lifecycle:admit();if not admitted then return nil,why end
+  return get().compositions.library:save(value,revision)
+end
+function M.read_command_library(path) return get().compositions.library:read(path) end
+function M.import_command_library(receipt)
+  local admitted,why=lifecycle:admit();if not admitted then return nil,why end
+  return get().compositions.library:apply_import(receipt)
+end
+function M.export_command_library(path,revision) return get().compositions.library:export(path,revision) end
+function M.user_command_results() return get().compositions:results() end
+function M.cancel_user_command() return get().compositions:cancel() end
+function M.rerun_user_command(id,opts)
+  if opts~=nil and type(opts)~='table' then return nil,'Retry options must be a table' end
+  opts=opts or {}
+  if opts.context~=nil and type(opts.context)~='table' then return nil,'Retry context must be a table' end
+  if opts.done~=nil and type(opts.done)~='function' then return nil,'Retry done must be a function' end
+  if opts.mode~=nil and opts.mode~='n' and opts.mode~='x' and opts.mode~='i' then return nil,'Retry mode must be n, x or i' end
+  local admitted,why=lifecycle:admit();if not admitted then return nil,why end
+  local env=get()
+  local ctx=opts.context or env.session.active and vim.deepcopy(env.session.active.ctx) or K.context(opts.mode)
+  local ok,value,reason=pcall(env.compositions.retry,env.compositions,id,ctx,opts)
+  if not ok then return nil,tostring(value) end
+  return value,reason
+end
+
 -- Direct editor entry and tree entry share Session dispatch. This envelope is
 -- data only: keys, source handles and execution authority belong to the host.
 function M.invoke(request, opts)
@@ -99,12 +128,20 @@ function M.invoke(request, opts)
   if env.session.active then return false, 'Leave the current command surface before invoking an editor shortcut' end
   local context = opts.context or K.context(opts.mode)
   if not K.valid(context) then return false, 'Invocation source is no longer available' end
-  context = vim.api.nvim_win_call(context.win, function() return K.context(opts.mode or context.mode) end)
+  local pinned_edit=command.provider=='editing' and opts.context~=nil
+  if pinned_edit then
+    local unchanged,reason=K.unchanged(context)
+    if not unchanged then return false,reason end
+    if not vim.deep_equal(context.cursor,vim.api.nvim_win_get_cursor(context.win)) then return false,'Editing cursor changed; invoke the command again' end
+    context=vim.deepcopy(context)
+  else context = vim.api.nvim_win_call(context.win, function() return K.context(opts.mode or context.mode) end) end
+  local entry_options={context=context,mode=opts.mode,interactive=false}
+  if pinned_edit then entry_options.on_open=function(current)current.ctx=vim.deepcopy(context)end end
   local state, failure
   if env.session.suspended then
-    state, failure = env.session:resume({ context = context, mode = opts.mode, interactive = false })
+    state, failure = env.session:resume(entry_options)
   else
-    state, failure = env.session:open({ context = context, mode = opts.mode, interactive = false })
+    state, failure = env.session:open(entry_options)
   end
   if not state then return false, failure or 'Could not attach the command surface' end
   if lifecycle:current() ~= env or env.session.active ~= state or env.registry:get(intent.command) ~= command then

@@ -61,9 +61,15 @@ local function open_workspace(self, state, command, route, done)
   return true
 end
 
-local function session_action(self, state, command, ctx, done)
+local function session_action(self, state, command, ctx, done, args)
   local action = command.session_action
-  if action == 'selected_recipe' then
+  if action == 'composition' then
+    if state.busy then return reject(state,done,'Another command is running') end
+    if not self.compositions then return reject(state,done,'User commands are not available') end
+    local ok,why=self.compositions:dispatch(command,args or {},ctx,done)
+    if not ok then return reject(state,nil,why) end
+    return ok,why
+  elseif action == 'selected_recipe' then
     if state.busy then return reject(state, done, 'Another command is running; inspect Tasks or wait before starting this recipe') end
     if not self.project_recipes then return reject(state, done, 'Project recipe support is not available') end
     return self.project_recipes:run_selected(ctx, { done = done, interactive = #vim.api.nvim_list_uis() > 0 })
@@ -223,7 +229,7 @@ function M.run(self, id, args, route, done, prepared, context, process_target, e
   end
   if not available then retain_backend_query(state, command, args); return reject(state, done, reason) end
   if command.workspace then return open_workspace(self, state, command, route, done) end
-  if command.session_action then return session_action(self, state, command, ctx, done) end
+  if command.session_action then return session_action(self, state, command, ctx, done, args) end
   if state.busy then return reject(state, done, 'Another command is running; inspect Tasks or wait before starting this command') end
   local missing = missing_argument(command, args, prepared)
   if missing then return open_form(self, state, command, args, ctx, route, done, missing) end

@@ -20,7 +20,9 @@ SOURCE_TYPES = {"lua": {".lua"}, "native": {".c", ".h", ".def"},
                 "doc": {".txt"}, "docs": {".md"},
                 "examples": {".json", ".lua", ".cpp", ".cs", ".csproj"},
                 "tests": {".lua", ".py", ".js", ".json", ".md"},
-                "hosts/vscode": {".js", ".json", ".md"}, "tools": {".py", ".json"}}
+                "hosts/vscode": {".js", ".json", ".md"}, "hosts/vscode/runtime": {".lua"},
+                "hosts/vscode/test": {".lua"},
+                "tools": {".py", ".json"}}
 EXCLUDED_DIRS = {".git", ".artifacts", ".validation", "node_modules", "__pycache__",
                  "bin", "obj", "dist", "venv", ".venv", ".idea", ".vscode"}
 EXCLUDED_FILES = {".DS_Store", "Thumbs.db", "nvim.log", ".nvimlog"}
@@ -130,12 +132,12 @@ def parse_policy(content: bytes) -> list[str]:
 
 
 def validate_sources(contents: dict[str, bytes]) -> str:
-    essential = ROOT_FILES | {"lua/re35.lua", "lua/command_tree/init.lua", "native/core_modules.def",
+    essential = ROOT_FILES | {"native/core_modules.def",
         "hosts/vscode/package.json", "hosts/vscode/extension.js", "tests/run.py",
         "tests/fixtures/presentation-inspection.json", "examples/re35-development.json"}
     if not essential <= contents.keys():
         raise ValueError("Essential source-package files are missing")
-    if not re.search(r"return\s+require\(['\"]command_tree['\"]\)",
+    if "lua/re35.lua" in contents and not re.search(r"return\s+require\(['\"]command_tree['\"]\)",
                      contents["lua/re35.lua"].decode("utf-8")):
         raise ValueError("Canonical re35 compatibility entry is missing")
     manifest = contents["native/core_modules.def"].decode("utf-8")
@@ -150,19 +152,20 @@ def validate_sources(contents: dict[str, bytes]) -> str:
     actual = {name for name in contents if name.startswith("lua/command_environment/core/")}
     if len(modules) != len(set(modules)) or set(modules) != actual or not modules:
         raise ValueError("Native core manifest differs from packaged core sources")
-    init = contents["lua/command_tree/init.lua"].decode("utf-8")
-    versions = re.findall(r"\blocal\s+M\s*=\s*\{\s*version\s*=\s*['\"]([^'\"]+)['\"]", init)
     package = json.loads(contents["hosts/vscode/package.json"].decode("utf-8"))
-    if not isinstance(package, dict) or len(versions) != 1 or versions[0] != package.get("version"):
-        raise ValueError("Neovim and VS Code source versions differ")
+    # New releases target the VS Code host. Retained Neovim sources keep their
+    # own historical version; changing a package must not relabel legacy code.
+    version = package.get("version") if isinstance(package, dict) else None
+    if not isinstance(package, dict):
+        raise ValueError("VS Code package must be an object")
     if package.get("main") != "./extension.js" or package.get("license") != "Apache-2.0":
         raise ValueError("Unexpected VS Code source entry or license")
     catalog = json.loads(contents["tests/fixtures/presentation-inspection.json"].decode("utf-8"))
     if not isinstance(catalog, dict) or catalog.get("version") != 1 or not isinstance(catalog.get("cases"), list):
         raise ValueError("Shared presentation inspection catalog is invalid")
-    if not re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?", versions[0]):
+    if not isinstance(version, str) or not re.fullmatch(r"\d+\.\d+\.\d+(?:-[A-Za-z0-9.-]+)?", version):
         raise ValueError("Invalid source version")
-    return versions[0]
+    return version
 
 
 def digest(content: bytes) -> str:

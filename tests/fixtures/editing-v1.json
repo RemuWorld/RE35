@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "max_count": 1000,
+  "engine": "neovim",
+  "options": { "iskeyword": "@,48-57,_,192-255", "selection": "inclusive", "startofline": false },
+  "guide": [
+    { "text": "", "state": "incomplete", "next": [ "w", "s", "u", "d" ] },
+    { "text": "3", "state": "incomplete", "next": [ "w", "d" ] },
+    { "text": "1000", "state": "incomplete", "next": [ "w", "d" ] },
+    { "text": "w", "state": "ready", "invocation": { "command": "edit.move_words", "args": { "count": "1" } } },
+    { "text": "3w", "state": "ready", "invocation": { "command": "edit.move_words", "args": { "count": "3" } } },
+    { "text": "s", "state": "ready", "invocation": { "command": "edit.select_word", "args": {} } },
+    { "text": "u", "state": "ready", "invocation": { "command": "edit.uppercase_selection", "args": {} } },
+    { "text": "d", "state": "ready", "invocation": { "command": "edit.delete_lines", "args": { "count": "1" } } },
+    { "text": "2d", "state": "ready", "invocation": { "command": "edit.delete_lines", "args": { "count": "2" } } },
+    { "text": "1000d", "state": "ready", "invocation": { "command": "edit.delete_lines", "args": { "count": "1000" } } },
+    { "text": "0", "state": "invalid" },
+    { "text": "01w", "state": "invalid" },
+    { "text": "1001w", "state": "invalid" },
+    { "text": "2s", "state": "invalid" },
+    { "text": "2u", "state": "invalid" },
+    { "text": "3 w", "state": "invalid" },
+    { "text": "ggVG", "state": "invalid" },
+    { "text": ":lua", "state": "invalid" },
+    { "text": "2dd", "state": "invalid" }
+  ],
+  "library": {
+    "version": 1,
+    "commands": [
+      { "id": "user.move_three_words", "name": "Move three words", "steps": [
+        { "command": "edit.move_words", "args": { "count": { "value": "3" } } }
+      ] },
+      { "id": "user.select_current_word", "name": "Select current word", "steps": [
+        { "command": "edit.select_word" }
+      ] },
+      { "id": "user.uppercase_current_selection", "name": "Uppercase current selection", "steps": [
+        { "command": "edit.uppercase_selection" }
+      ] },
+      { "id": "user.delete_two_lines", "name": "Delete two lines", "steps": [
+        { "command": "edit.delete_lines", "args": { "count": { "value": "2" } } }
+      ] },
+      { "id": "user.uppercase_current_word", "name": "Select and uppercase current word", "steps": [
+        { "command": "edit.select_word" }, { "command": "edit.uppercase_selection" }
+      ] },
+      { "id": "user.move_count_words", "name": "Move a chosen number of words",
+        "inputs": [ { "name": "count", "type": "text", "required": true } ], "steps": [
+          { "command": "edit.move_words", "args": { "count": { "input": "count" } } }
+        ]
+      }
+    ]
+  },
+  "cases": [
+    {
+      "name": "move_three_small_words", "command": "edit.move_words", "args": { "count": "3" }, "undo": false,
+      "before": { "lines": [ "alpha.beta gamma delta" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" },
+      "after": { "lines": [ "alpha.beta gamma delta" ], "cursor": { "row1": 1, "byte0": 11 }, "mode": "n" }
+    },
+    {
+      "name": "select_containing_word", "command": "edit.select_word", "args": {}, "undo": false,
+      "before": { "lines": [ "alpha.beta gamma" ], "cursor": { "row1": 1, "byte0": 7 }, "mode": "n" },
+      "after": { "lines": [ "alpha.beta gamma" ], "cursor": { "row1": 1, "byte0": 9 }, "mode": "v", "anchor": { "row1": 1, "byte0": 6 } }
+    },
+    {
+      "name": "uppercase_character_selection", "command": "edit.uppercase_selection", "args": {}, "undo": true,
+      "before": { "lines": [ "one 한글 é😀" ], "cursor": { "row1": 1, "byte0": 2 }, "mode": "v", "anchor": { "row1": 1, "byte0": 0 } },
+      "after": { "lines": [ "ONE 한글 é😀" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" }
+    },
+    {
+      "name": "delete_two_lines", "command": "edit.delete_lines", "args": { "count": "2" }, "undo": true,
+      "before": { "lines": [ "one", "two", "three", "four" ], "cursor": { "row1": 2, "byte0": 1 }, "mode": "n" },
+      "after": { "lines": [ "one", "four" ], "cursor": { "row1": 2, "byte0": 1 }, "mode": "n" }
+    },
+    {
+      "name": "select_punctuation_run", "command": "edit.select_word", "args": {}, "undo": false,
+      "before": { "lines": [ "alpha...beta" ], "cursor": { "row1": 1, "byte0": 6 }, "mode": "n" },
+      "after": { "lines": [ "alpha...beta" ], "cursor": { "row1": 1, "byte0": 7 }, "mode": "v", "anchor": { "row1": 1, "byte0": 5 } }
+    },
+    {
+      "name": "select_exclusive_source", "command": "edit.select_word", "args": {}, "undo": false,
+      "options": { "selection": "exclusive" },
+      "before": { "lines": [ "alpha.beta gamma" ], "cursor": { "row1": 1, "byte0": 7 }, "mode": "n" },
+      "after": { "lines": [ "alpha.beta gamma" ], "cursor": { "row1": 1, "byte0": 10 }, "mode": "v", "anchor": { "row1": 1, "byte0": 6 } }
+    },
+    {
+      "name": "uppercase_reverse_unicode_selection", "command": "edit.uppercase_selection", "args": {}, "undo": true,
+      "before": { "lines": [ "a한😀éz" ], "cursor": { "row1": 1, "byte0": 1 }, "mode": "v", "anchor": { "row1": 1, "byte0": 11 } },
+      "after": { "lines": [ "a한😀ÉZ" ], "cursor": { "row1": 1, "byte0": 1 }, "mode": "n" }
+    },
+    {
+      "name": "uppercase_line_selection", "command": "edit.uppercase_selection", "args": {}, "undo": true,
+      "before": { "lines": [ "  one", "two 한글", "three" ], "cursor": { "row1": 2, "byte0": 2 }, "mode": "V", "anchor": { "row1": 1, "byte0": 2 } },
+      "after": { "lines": [ "  ONE", "TWO 한글", "three" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" }
+    },
+    {
+      "name": "uppercase_exclusive_source", "command": "edit.uppercase_selection", "args": {}, "undo": true,
+      "options": { "selection": "exclusive" },
+      "before": { "lines": [ "abcde" ], "cursor": { "row1": 1, "byte0": 3 }, "mode": "v", "anchor": { "row1": 1, "byte0": 1 } },
+      "after": { "lines": [ "aBCde" ], "cursor": { "row1": 1, "byte0": 1 }, "mode": "n" }
+    },
+    {
+      "name": "move_across_unicode_line", "command": "edit.move_words", "args": { "count": "3" }, "undo": false,
+      "before": { "lines": [ "one two", "한글 three" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" },
+      "after": { "lines": [ "one two", "한글 three" ], "cursor": { "row1": 2, "byte0": 7 }, "mode": "n" }
+    },
+    {
+      "name": "move_clamps_at_document_end", "command": "edit.move_words", "args": { "count": "3" }, "undo": false,
+      "before": { "lines": [ "one" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" },
+      "after": { "lines": [ "one" ], "cursor": { "row1": 1, "byte0": 2 }, "mode": "n" }
+    },
+    {
+      "name": "delete_clamps_at_document_end", "command": "edit.delete_lines", "args": { "count": "2" }, "undo": true,
+      "before": { "lines": [ "one", "  two" ], "cursor": { "row1": 2, "byte0": 2 }, "mode": "n" },
+      "after": { "lines": [ "one" ], "cursor": { "row1": 1, "byte0": 2 }, "mode": "n" }
+    },
+    {
+      "name": "delete_all_leaves_empty_buffer", "command": "edit.delete_lines", "args": { "count": "2" }, "undo": true,
+      "before": { "lines": [ "one", "two" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" },
+      "after": { "lines": [ "" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" }
+    }
+  ],
+  "rejections": [
+    { "name": "select_whitespace", "command": "edit.select_word", "args": {}, "before": { "lines": [ "one  two" ], "cursor": { "row1": 1, "byte0": 3 }, "mode": "n" } },
+    { "name": "select_empty_line", "command": "edit.select_word", "args": {}, "before": { "lines": [ "" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" } },
+    { "name": "uppercase_without_visual", "command": "edit.uppercase_selection", "args": {}, "before": { "lines": [ "abc" ], "cursor": { "row1": 1, "byte0": 0 }, "mode": "n" } },
+    { "name": "delete_in_visual", "command": "edit.delete_lines", "args": { "count": "2" }, "before": { "lines": [ "abc", "def" ], "cursor": { "row1": 1, "byte0": 1 }, "mode": "v", "anchor": { "row1": 1, "byte0": 0 } } }
+  ]
+}

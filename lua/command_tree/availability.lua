@@ -18,7 +18,7 @@ local titles = {
   executable_missing = 'Executable is unavailable', backend_missing = 'Backend is not configured',
   backend_unavailable = 'Backend is unavailable', formatter_unavailable = 'Formatter is unavailable',
 }
-local context_fields = { 'buf', 'win', 'mode', 'count', 'register', 'cursor', 'changedtick', 'filetype',
+local context_fields = { 'buf', 'win', 'mode', 'raw_mode', 'document_uri', 'count', 'register', 'cursor', 'changedtick', 'filetype',
   'selection', 'file', 'project_root', 'cwd' }
 local function text(value)
   if type(value) ~= 'string' then

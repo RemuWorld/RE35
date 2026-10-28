@@ -1,40 +1,30 @@
 # RE35 documentation
 
-These documents describe RE35 0.4.0. Start with installation and configuration.
-See [command coverage](command-coverage.md) and
-[compatibility](compatibility.md) for host scope and known limitations.
+RE35 **0.5.0** runs in VS Code on Windows x64 and is distributed through GitHub.
+It uses ordinary VS Code editing; Neovim is not required. The custom UI remains
+on hold. Start with the native controls and supported workflows below.
 
-## User guides
+## Start here
 
-| Guide | Purpose |
-| --- | --- |
-| [Installation](install.md) / [Configuration](configuration.md) | Install and configure RE35 |
-| [Neovim help](../doc/command-environment.txt) / [Integrations](../doc/command-environment-integrations.txt) | Keys, workspaces and optional adapters |
-| [File search](file-search.md) / [Search providers](search-providers.md) | Providers, Results and search limits |
-| [Project recipes](project-recipes.md) / [Recovery](recovery-workflow.md) | Project selection, execution and retry |
-| [UI settings](ui-settings.md) / [Presentation presets](presentation-presets.md) | Customize and share appearance |
-| [VS Code host](../hosts/vscode/README.md) | Optional desktop development host |
+1. [Install](install.md) the VSIX and open a local workspace.
+2. [Try a workflow](usage.md): discover, search, review an edit and inspect results.
+3. [Customize](customization.md): create commands, bind shortcuts and define
+   immediate contextual input chains.
+4. [Troubleshoot](troubleshooting.md) an unavailable command or unexpected state.
 
-## Architecture and integration
+[Compatibility](compatibility.md) describes supported scope, limits and remaining
+verification. [Roadmap](roadmap.md) separates this release from future work.
 
-| Reference | Purpose |
-| --- | --- |
-| [Architecture and execution](development/execution-structure.md) | Core/host boundaries, module owners and call paths |
-| [Extension API](extensions-v1.md) / [Portable core](portable-core.md) | Trusted integrations, shared Lua rules and optional C ABI |
-| [Host contracts](host-contracts.md) / [Document v2](document-v2.md) | Document coordinates, pages and host responsibilities |
-| [Workflow](development/workflow-contract.md) / [Process ownership](development/process-ownership.md) | Context, execution and cancellation |
-| [Recovery](development/task-recovery-contract.md) / [Results and search](development/results-search-contract.md) | Original invocation and source/provider identity |
-| [Presentation](development/presentation-contract.md) / [Follow-up](follow-up-contract.md) | Appearance data, host fallback and proposed next actions |
+## For contributors and integrations
 
-## Development
+- [Development](development.md): source layout, local builds and validation.
+- [Command API](reference/command-api.md): semantic invocation, editor actions
+  and trusted adapters.
+- [Workflow data](reference/workflow-data.md): portable profiles, project roots,
+  recipes and search providers.
+- [Core contracts](reference/core-contracts.md): coordinates, protocol, document
+  plans, ownership and cancellation.
 
-| Reference | Purpose |
-| --- | --- |
-| [Contributing](../CONTRIBUTING.md) / [Tests](../tests/README.md) | Changes and repeatable checks |
-| [Source packaging](development/source-packaging.md) / [Self-development](development/self-development.md) | Reviewed inventory and this checkout's recipes |
-| [Changelog](../CHANGELOG.md) / [Roadmap](roadmap.md) | Public versions and planned work |
-
-`require('re35')` is the canonical Neovim entry; `command_tree` remains its
-compatible alias. Product versions are separate from profile, document,
-presentation, protocol and ABI contract versions. Portable declarations do not
-imply complete feature parity between hosts.
+For the retired Neovim implementation, use the documentation at
+[`v0.4.0`](https://github.com/RemuWorld/RE35/tree/v0.4.0). Its keys, settings and
+theme behavior are historical and are not the setup path for this release.

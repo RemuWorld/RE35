@@ -61,6 +61,26 @@ function expanded(page, retained, aggregate) {
   const { lines, ...identity } = page;
   return { ...identity, ...retained, find: aggregate.find, replace: aggregate.replace };
 }
+function unchangedPage(page, plan, find, replacement) {
+  if (plan?.match_count !== 0) return null;
+  // The core still prepares every page. Avoid a second IPC/serialization and
+  // regeneration only when the captured source independently proves there is
+  // no edit. A zero count alone is not authority to trust a foreign plan.
+  const fields = ['contract_version', 'uri', 'revision', 'encoding', 'start_line', 'total_lines', 'total_bytes',
+    'line_count', 'find', 'replace', 'match_count', 'edits', 'output_bytes'];
+  const descriptors = Object.getOwnPropertyDescriptors(plan);
+  const text = (value, maximum, nonempty) => typeof value === 'string' && (!nonempty || value.length > 0)
+    && !/[\r\n\0]/.test(value) && bytes(value) <= maximum && Buffer.from(value, 'utf8').toString('utf8') === value;
+  if (!plan || ![Object.prototype, null].includes(Object.getPrototypeOf(plan))
+    || Reflect.ownKeys(plan).length !== fields.length || fields.some(field => !descriptors[field]?.enumerable || !Object.hasOwn(descriptors[field], 'value'))
+    || ['contract_version', 'uri', 'revision', 'encoding', 'start_line', 'total_lines', 'total_bytes'].some(field => plan[field] !== page[field])
+    || plan.line_count !== page.lines.length || plan.find !== find || plan.replace !== replacement
+    || !text(find, 4096, true) || !text(replacement, 65536, false)
+    || !Array.isArray(plan.edits) || plan.edits.length !== 0 || Reflect.ownKeys(plan.edits).length !== 1
+    || plan.output_bytes !== page.lines.reduce((sum, line) => sum + bytes(line), 0)
+    || page.lines.some(line => line.includes(find))) throw new Error('Document replacement zero-match page differs from its captured source');
+  return page.lines;
+}
 function planBytes(plan) {
   const { edits, next_lines, ...wire } = plan;
   if (bytes(JSON.stringify(wire)) > limits.planBytes) throw new Error('Document replacement exceeds the aggregate plan budget');
@@ -114,7 +134,7 @@ async function prepare(core, snapshot, find, replacement, check) {
     result.match_count += plan.match_count;
     if (result.match_count > limits.edits) throw new Error('Document replacement exceeds the aggregate edit budget');
     result.pages.push(compact(plan)); planBytes(result);
-    const next = await call('document_page_apply', { page, plan });
+    const next = unchangedPage(page, plan, find, replacement) || await call('document_page_apply', { page, plan });
     if (!Array.isArray(next) || next.length !== page.lines.length) throw new Error('Document replacement page is incomplete');
     result.output_bytes += next.reduce((sum, line) => sum + bytes(line), 0);
     if (result.output_bytes > limits.outputBytes) throw new Error('Document replacement exceeds 1 MiB of output');
@@ -135,7 +155,8 @@ async function validate(core, current, retained, check) {
     const plan = expanded(values[index], retained.pages[index], retained);
     count += plan.match_count;
     if (count > limits.edits) throw new Error('Document replacement budget changed');
-    const lines = await call('document_page_apply', { page: values[index], plan });
+    const lines = unchangedPage(values[index], plan, retained.find, retained.replace)
+      || await call('document_page_apply', { page: values[index], plan });
     if (!Array.isArray(lines) || lines.length !== values[index].lines.length) throw new Error('Document replacement page is incomplete');
     output += lines.reduce((sum, line) => sum + bytes(line), 0); next.push(...lines);
     edits.push(...plan.edits);

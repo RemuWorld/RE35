@@ -22,7 +22,7 @@ local function register_workspace(env, spec)
   end
   return definition
 end
-local function prepare_environment(opts, pending)
+local function prepare_environment(opts, pending, library_seed)
   opts = opts or {}
   assert(type(opts) == "table", "Command Environment options must be a table")
   local options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
@@ -107,6 +107,7 @@ local function prepare_environment(opts, pending)
   env.executor = require("command_tree.executor").new(registry, usage)
   require("command_tree.defaults").register(registry, options)
   require("command_tree.file_search").register(env)
+  require('command_tree.editing.host').register(env)
   for index, spec in ipairs(options.commands) do
     declaration("commands[" .. index .. "]", registry.register, registry, spec)
   end
@@ -139,6 +140,8 @@ local function prepare_environment(opts, pending)
       return value
     end })
   end
+  env.compositions = require('command_tree.composition').new(env,library_seed)
+  pending.compositions = env.compositions
   if #options.extensions > 0 then
     env.extensions = require('command_tree.extensions').new(env)
   else
@@ -240,15 +243,19 @@ local function prepare_environment(opts, pending)
   end
   env.session = require("command_tree.session").new({ options = options, registry = registry, usage = usage,
     workspaces = workspaces, preferences = preferences, executor = env.executor, triggers = T, project_recipes = env.project_recipes,
-    select_presentation = select_presentation })
+    select_presentation = select_presentation, compositions = env.compositions })
   local EditorKeys = require('command_tree.editor_keys')
   EditorKeys.check(EditorKeys.validate(options.editor_keys, options.open_key))
   return env
 end
-local function prepare(opts)
+local function prepare(opts,library_seed)
   local pending = {}
-  local ok, result = xpcall(function() return prepare_environment(opts, pending) end, debug.traceback)
-  if not ok then if pending.extensions then pending.extensions:dispose() end; error(result, 0) end
+  local ok, result = xpcall(function() return prepare_environment(opts, pending,library_seed) end, debug.traceback)
+  if not ok then
+    if pending.extensions then pending.extensions:dispose() end
+    if pending.compositions then pending.compositions:dispose() end
+    error(result, 0)
+  end
   return result
 end
 
